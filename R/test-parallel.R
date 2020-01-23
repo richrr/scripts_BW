@@ -1,5 +1,3 @@
-
-
 #cd /nfs3/PHARM/Morgun_Lab/richrr/Cervical_Cancer/analysis/merged/tmp_del_test
 #SGE_Batch -c "Rscript test-parallel-v4.R 1000000" -m 100G -F 100G -r log4core1000Kv4 -q biomed -M rodrrich@oregonstate.edu -P 16
 #SGE_Batch -c "Rscript test-parallel-v4.R 100000" -m 100G -F 100G -r log4core100Kv4 -q biomed -M rodrrich@oregonstate.edu -P 16
