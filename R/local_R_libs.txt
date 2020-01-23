@@ -1,0 +1,158 @@
+https://www.stat.osu.edu/computer-support/mathstatistics-packages/installing-r-libraries-locally-your-home-directory
+
+# to see the directories that R searches for libraries, from within R you can do:
+.libPaths()
+
+# If you don't have a directory named R in your home directory, this method will create one and place libraries in it down a long convoluted path.  
+# Typically this isn't a big deal.
+#From within R you can do:
+install.packages('argparser', repos="http://cran.r-project.org")
+
+> .libPaths()
+[1] "/usr/lib64/R/library" "/usr/share/R/library"
+> install.packages('argparser', repos="http://cran.r-project.org")
+Installing package into ‘/usr/lib64/R/library’
+(as ‘lib’ is unspecified)
+Warning in install.packages("argparser", repos = "http://cran.r-project.org") :
+  'lib = "/usr/lib64/R/library"' is not writable
+Would you like to use a personal library instead?  (y/n) y
+Would you like to create a personal library
+~/R/x86_64-redhat-linux-gnu-library/3.2
+to install packages into?  (y/n) 
+
+install.packages('hash', repos="http://cran.r-project.org")
+install.packages('psych', repos="http://cran.r-project.org")
+install.packages('gtools', repos="http://cran.r-project.org")
+install.packages('corpcor', repos="http://cran.r-project.org")
+
+on cgrb
+install.packages('ggplot2', dependencies=TRUE, repos='http://cran.rstudio.com/')
+
+install.packages('ggfortify', repos='http://cran.rstudio.com/')
+
+
+source("http://bioconductor.org/biocLite.R")
+biocLite("biomaRt")
+
+
+install.packages('doParallel', repos='http://cran.rstudio.com/')
+install.packages('doSNOW', repos='http://cran.rstudio.com/')
+
+
+source("http://bioconductor.org/biocLite.R")
+biocLite("affy")
+
+source("http://bioconductor.org/biocLite.R")
+biocLite("vsn")
+
+$ /nfs3/PHARM/Morgun_Lab/richrr/Cervical_Cancer/partial-correlations/GGMridge
+install.packages('GGMridge', repos='http://cran.rstudio.com/')
+install.packages('igraph', repos='http://cran.rstudio.com/')
+
+###########################
+Error in loadNamespace(i, c(lib.loc, .libPaths()), versionCheck = vI[[i]]) : 
+  namespace ‘stringr’ 0.6.2 is already loaded, but >= 1.0.0 is required
+ERROR: lazy loading failed for package ‘NMF’
+* removing ‘/raid1/home/pharmacy/rodrrich/R/NMF’
+ERROR: dependency ‘NMF’ is not available for package ‘igraph’
+* removing ‘/raid1/home/pharmacy/rodrrich/R/igraph’
+
+The downloaded source packages are in
+	‘/data/RtmpCxCxN3/downloaded_packages’
+````````````````````````````````````````````````
+
+Solution from https://github.com/renozao/NMF/issues/42
+
+I have user library v1.0.0 then system library v0.6.2
+
+> packageVersion('stringr', .libPaths()[1])
+[1] ‘1.0.0’
+> packageVersion('stringr', .libPaths()[2])
+[1] ‘0.6.2’
+
+this then works
+
+ wget http://cran.uk.r-project.org/src/contrib/NMF_0.20.6.tar.gz
+tar zxvf  NMF_0.20.6.tar.gz
+edit NMF/DESCRIPTION to remove the version dependency
+
+diff NMF/DESCRIPTION.orig NMF/DESCRIPTION
+23c23
+< Imports: graphics, stats, stringr (>= 1.0.0), digest, grid, grDevices,
+> Imports: graphics, stats, stringr, digest, grid, grDevices,
+
+R CMD INSTALL -d NMF
+all works fine and it doesn't do namespace ‘stringr’ 0.6.2 is already loaded,
+#############################
+then in R run install.packages('igraph', repos='http://cran.rstudio.com/')
+
+install.packages('foreach', repos='http://cran.rstudio.com/')
+install.packages('Rmpi', repos='http://cran.rstudio.com/') # got error about "Cannot find mpi.h header file" and didn't have sudo access so asked Chris to install
+
+install.packages('reshape', repos='http://cran.rstudio.com/')
+
+source("https://bioconductor.org/biocLite.R")
+biocLite("limma")
+
+source("http://bioconductor.org/biocLite.R")
+biocLite(c("Biobase"))
+
+install.packages('RColorBrewer', repos='http://cran.rstudio.com/')
+
+
+ install.packages('outliers', repos='http://cran.rstudio.com/')
+
+ # https://cran.r-project.org/web/packages/ppcor/ppcor.pdf
+ install.packages('ppcor', repos="http://cran.r-project.org") 
+ (allows using pcor.test)
+ 
+ 
+ 
+install.packages('RefManageR', repos="http://cran.r-project.org") 
+ 
+install.packages('RCurl', repos="http://cran.r-project.org") 
+ 
+
+install.packages("Rttf2pt1")
+install.packages("extrafontdb")
+install.packages("extrafont")
+
+# https://docs.aspose.com/display/wordsjava/How+to++Install+True+Type+Fonts+on+Linux
+cd /raid1/home/pharmacy/rodrrich
+mkdir fonts
+copy from C:\Windows\Fonts and paste in \\files.cgrb.oregonstate.edu\RAID1\home\pharmacy\rodrrich\fonts  
+# https://community.linuxmint.com/tutorial/view/29
+mv fonts .fonts
+fc-cache -fv
+
+
+install.packages("ggrepel")
+
+
+source("https://bioconductor.org/biocLite.R")
+biocLite("DESeq2")
+library(DESeq2)
+
+install.packages("calibrate")
+
+install.packages("ProNet")
+
+install.packages("optparse")
+install.packages('optparse',lib='/raid1/home/pharmacy/rodrrich/R') # doing this way installs so qiime can see it
+
+install.packages("metagenomeSeq") # package ‘metagenomeSeq’ is not available (for R version 3.3.2)
+
+source("https://bioconductor.org/biocLite.R")
+biocLite("Biostrings")
+
+install.packages("seqRFLP")
+install_github("mhahsler/rBLAST")
+install.packages("seqinr")
+
+
+
+
+
+
+
+
