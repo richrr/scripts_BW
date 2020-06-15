@@ -47,15 +47,17 @@ for(col in c(1:number_of_new_datasets)){
 	df_tmp = df[,c((endcol+1):(endcol + columns_to_keep))]
 	endcol = endcol + columns_to_keep
 	#print(endcol)
-	colnames(df_tmp) = gsub("(Analys .+ )", paste0("Analys 1 ", outstr, " "), colnames(df_tmp))
+	#colnames(df_tmp) = gsub("(Analys .+ )", paste0("Analys 1 ", outstr, " "), colnames(df_tmp))
+	# june 9 2020
+	colnames(df_tmp) = gsub("(Analys [0-9]+ )", paste0("Analys 1 ", outstr, " "), colnames(df_tmp))
 	IdName = rownames(df_tmp)
-	
+
 	df_tmp = cbind(IdName, df_tmp)
 	colnames(df_tmp)[1] = Id
-	
+
 	print(head(df_tmp))
 	write.csv(df_tmp, paste0(c(files,outputFile,col,".csv"), collapse=''),quote=F, row.names=F)
-	
+
 }
 
 

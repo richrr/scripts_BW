@@ -49,8 +49,9 @@ write.table(fdf, paste0(args[1], ".for.lefse.tsv"), sep="\t", col.names=F, quote
 
 
 
+
 # build shell command file
-cmd = "#!/bin/bash\nexport TMPDIR=/lscratch/\\$SLURM_JOB_ID\n\nmodule load lefse\n"
+#cmd = "#!/bin/bash\nexport TMPDIR=/lscratch/\\$SLURM_JOB_ID\n\nmodule load lefse\n"
 cmd = "\nmodule load lefse\n"
 if(length(mapcols) == 1){
     cmd = paste0(cmd, "format_input.py ", args[1], ".for.lefse.tsv" , " ", args[1], ".lefse.in", " -c 1 -u 2 -o 1000000")
@@ -61,10 +62,13 @@ if(length(mapcols) == 1){
     quit()
 }
 
+##### created one header file that will be used to write to the lefse output  /data/rodriguesrr/scripts/lefse_header_file.tsv
+
 cmd = paste0(
 cmd,"\n",
 "run_lefse.py ", args[1], ".lefse.in", " ", args[1], ".lefse.res.tsv", "\n",
-"plot_res.py ",  args[1], ".lefse.res.tsv", " ", args[1], ".lefse.pdf --dpi 600 --format pdf"
+"plot_res.py ",  args[1], ".lefse.res.tsv", " ", args[1], ".lefse.pdf --dpi 600 --format pdf" , "\n",
+"cat /data/rodriguesrr/scripts/lefse_header_file.tsv ", args[1], ".lefse.res.tsv", " > ", args[1], ".lefse.results.tsv"
 )
 #print(cmd)
 
