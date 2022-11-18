@@ -68,6 +68,7 @@ cmd = paste0(
 cmd,"\n",
 "run_lefse.py ", args[1], ".lefse.in", " ", args[1], ".lefse.res.tsv", "\n",
 "plot_res.py ",  args[1], ".lefse.res.tsv", " ", args[1], ".lefse.pdf --dpi 600 --format pdf" , "\n",
+"plot_cladogram.py ",  args[1], ".lefse.res.tsv", " ", args[1], ".lefse.cladogram.pdf --dpi 600 --format pdf" , "\n",
 "cat /data/rodriguesrr/scripts/lefse_header_file.tsv ", args[1], ".lefse.res.tsv", " > ", args[1], ".lefse.results.tsv"
 )
 #print(cmd)

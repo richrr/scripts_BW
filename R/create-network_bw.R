@@ -48,6 +48,7 @@ p <- add_argument(p, "--foldchthresh", help="fold change threshold", default=0, 
 p <- add_argument(p, "--logbase", help="calc log using the base", default=2) # allowed: 0 (no log), 1 (e), 2, 10
 
 p <- add_argument(p, "--foldchMean", help="use fold change from mean", flag=TRUE)  # default fold change is median
+p <- add_argument(p, "--foldchGeoMean", help="use fold change from mean", flag=TRUE)  # default fold change is median
 #p <- add_argument(p, "--transposeOutput", help="tranpose the results so the rows are analysis and columns are gene or pairs", flag=TRUE)  # easier for downstream grep of required analysis, do not use when you expect many genes or pairs since it might truncate when you open in excel or librecalc due ot limited columns
 
 p <- add_argument(p, "--noPUC", help="do not calc. PUC, so you do not need to use fold change", flag=TRUE)
@@ -88,6 +89,7 @@ logbase = argv$logbase
 
 foldchVar = 'FolChMedian'
 if(argv$foldchMean){foldchVar = "FoldChange"}
+if(argv$foldchGeoMean){foldchVar = "FolChGeoMean"}
 outputFile = paste(outputFile , foldchVar, '_', sep='')
 
 
@@ -128,7 +130,7 @@ remove_redundant_columns = function(this_df, total_numb_input_files){
              }
           } else{ # the rare case where you only have one dataset
           	rownames(this_df) <- this_df[, 1]
-          	this_df <- this_df[, -1]
+          	this_df <- this_df[, -1, drop=F] # june 21 2020
           }
 
       return(this_df)
@@ -138,9 +140,9 @@ remove_redundant_columns = function(this_df, total_numb_input_files){
 #------------------------------------------------------------------------------------------------
 # calc PUC (%) at each FDR threshold and plot
 #------------------------------------------------------------------------------------------------
-calc_PUC_at_thresholds = function(df, str='all'){
+calc_PUC_at_thresholds = function(PUCoutfile, df, str='all'){
 
-    write.csv(df, paste("tmp", str, "csv", sep='.'))
+    #write.csv(df, paste("tmp", str, "csv", sep='.'))
     combined_fdr = c(0)
     puc_percent = c(0)
     df = as.matrix(df)
@@ -168,7 +170,7 @@ calc_PUC_at_thresholds = function(df, str='all'){
 
     plt = cbind(combined_fdr, puc_percent)
 
-    pdf(paste(search_group_santized, str, 'FDRvsPUC.pdf', sep='-'))
+    pdf(paste(PUCoutfile, str, 'FDRvsPUC.pdf', sep='-'))
     plot(combined_fdr, puc_percent, type="o", ylab="PUC(%)", xlab="combined FDR", pch=10, cex=.2, ylim=c(0, 100) )
     #plot(plt, type="o", ylab="PUC(%)", xlab="combined FDR", pch=10, cex=.2 )
 
@@ -254,6 +256,7 @@ calc_PUC_at_thresholds = function(df, str='all'){
    FoldChangeMetabolic = remove_redundant_columns(FoldChangeMetabolic, total_numb_input_files)
    #print("Removed redundant id cols from fc file")
 
+	 #print(head(FoldChangeMetabolic))
    FoldChangeColnames = colnames(FoldChangeMetabolic)[grep(foldchVar,colnames(FoldChangeMetabolic))]
    # if an Analysis number is specified then select only that analysis number
    if(analysisfc != "ALL"){
@@ -437,16 +440,16 @@ forPUC = function(FoldChangeMetabolic,noPUC){
 
     # sort as per combined fdr
     sorted_result = result[order(result$"combinedFDR"), ]
-    plt = calc_PUC_at_thresholds(sorted_result) # walk along fdr and calc puc at diff fdr
+    plt = calc_PUC_at_thresholds(PUCoutfile, sorted_result) # walk along fdr and calc puc at diff fdr
     write.csv(plt, paste(PUCoutfile, "all-edges.csv", sep='.'), row.names=FALSE)
 
     # if there are only pos or neg correlations, use the if condition to avoid error
     if(nrow(sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == 1),])>0){
-    pos_plt = calc_PUC_at_thresholds(sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == 1),], "pos") # walk along fdr and calc puc at diff fdr
+    pos_plt = calc_PUC_at_thresholds(PUCoutfile, sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == 1),], "pos") # walk along fdr and calc puc at diff fdr
     write.csv(pos_plt, paste(PUCoutfile, "pos-edges.csv", sep='.'), row.names=FALSE)
     }
     if(nrow(sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == -1),])>0){
-    neg_plt = calc_PUC_at_thresholds(sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == -1),], "neg") # walk along fdr and calc puc at diff fdr
+    neg_plt = calc_PUC_at_thresholds(PUCoutfile, sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == -1),], "neg") # walk along fdr and calc puc at diff fdr
     write.csv(neg_plt, paste(PUCoutfile, "neg-edges.csv", sep='.'), row.names=FALSE)
     }
     data = sorted_result
@@ -500,18 +503,18 @@ calc_stats = function(inNet, PUC_Prop, correlThreshold=0){
         nodes = union(setpartner1, setpartner2)
         #print(paste(c("Number of unique nodes: ", length(nodes)), collapse=""))
 
-        df_a = inNet[,c("partner1InFold","partner1_FoldChange")]
+        df_a = inNet[,c("partner1InFold","partner1_FoldChange"), drop=F]
         colnames(df_a) = c("partnerInFold","partner_FoldChange")
         rownames(df_a) <- NULL
 
-        df_b = inNet[,c("partner2InFold","partner2_FoldChange")]
+        df_b = inNet[,c("partner2InFold","partner2_FoldChange"), drop=F]
         colnames(df_b) = c("partnerInFold","partner_FoldChange")
         rownames(df_b) <- NULL
 
         df_ab = rbind(df_a, df_b)
         uniq_df_ab = unique(df_ab)
         print("Unique nodes (partner, fc) df:")
-	print(dim(uniq_df_ab))
+        print(dim(uniq_df_ab))
 
         upreg = length(uniq_df_ab[as.numeric(uniq_df_ab[,"partner_FoldChange"]) > 1, "partner_FoldChange"])
         dnreg = length(uniq_df_ab[as.numeric(uniq_df_ab[,"partner_FoldChange"]) < 1, "partner_FoldChange"])
@@ -519,8 +522,8 @@ calc_stats = function(inNet, PUC_Prop, correlThreshold=0){
         potential_pos_corr_edges = choose(upreg, 2) + choose(dnreg, 2)
         potential_neg_corr_edges = upreg * dnreg
 
-        edgesDistinctNodes = inNet[which(inNet[,"partner1"]!=inNet[,"partner2"]), ]
-        #print(paste(c("Number of unique edges (without self loops): ", nrow(edgesDistinctNodes)), collapse=""))
+        edgesDistinctNodes = inNet[which(inNet[,"partner1"]!=inNet[,"partner2"]), ,drop=F]
+        print(paste(c("Number of unique edges (without self loops): ", nrow(edgesDistinctNodes)), collapse=""))
 
         write.csv(paste(c("Lowest pos corr:" , lowest_pos_corrl), collapse='') , file=out, row.names=FALSE)
         write.csv(paste(c("Highest pos corr:" , highest_pos_corrl), collapse='') , file=out, row.names=FALSE)
@@ -561,29 +564,55 @@ generateNetwork = function(){
 	out = as.matrix(out)
     #df = apply(df[,c("combinedFDR", "PUC")],2,function(x){as.numeric(as.vector(x))})
 
-
-	out = out[(as.numeric(out[,"combinedPvalue"])<combinedPvalueCutoff)==1,]
-	out = out[(as.numeric(out[,"combinedFDR"])<combinedFDRCutoff)==1,]
+	# feb 10 2022: if it is a single dataset it becomes a vector so adding the drop=FALSE
+	out = out[(as.numeric(out[,"combinedPvalue"])<combinedPvalueCutoff)==1,, drop=FALSE]
+	out = out[(as.numeric(out[,"combinedFDR"])<combinedFDRCutoff)==1,, drop=FALSE]
+	print(head(out))
+	
 	# find significant in individual pvalue: all of the pvalues for all of the datasets for each pair must be smaller than threshold
 	# find pvalue data
   # if it is a single dataset it becomes a vector so adding the drop=FALSE
 	pvalueData = out[,grep("pvalue",colnames(out)), drop=FALSE]
 	pvalueData = pvalueData[,grep(search_group,colnames(pvalueData)), drop=FALSE]
+	#print(head(pvalueData))
+
 
 	pvalueData = as.matrix(pvalueData)
-	pvalueData = apply(pvalueData,2,function(x){as.numeric(as.vector(x))})
+	#print(head(pvalueData))
+	
+	## artifically add row (with 0) incase it is only 1 row
+	artif_flag = FALSE
+	if(nrow(pvalueData) == 1){
+			tmp_v = rep(NA, ncol(pvalueData))
+			tmp_artif = data.frame(t(tmp_v))
+			colnames(tmp_artif) = colnames(pvalueData)
+			rownames(tmp_artif) = "DUMMY"
+			pvalueData = rbind(tmp_artif, pvalueData) # this somehow converts it to numeric
+			#print(head(pvalueData))
+			artif_flag = TRUE
+	} else{
+		pvalueData = apply(pvalueData,2,function(x){as.numeric(as.vector(x))})
+	}
+	#print(head(pvalueData))
+	
+	
+	# remove the artifical row
+	if(artif_flag){
+				pvalueData = pvalueData[-1,,drop=F]
+	}
 
 	# added this on july 17 2018, after I added this is in the create nets for diff corr
 	if(is.null(nrow(pvalueData))){
 		print("Qutting since no edges passed the fisher pval or fdr cuts.")
 		q()
 	}
+	
 
 	# calculate the largest pvalue among all datasets for each gene, this smallest pvalue must be smaller than threshold
-	passIndevidualPvalue = apply(pvalueData,1,max)<individualPvalueCutoff
-	#print(passIndevidualPvalue)
+	passIndevidualPvalue = apply(pvalueData,1,max,na.rm=T)<individualPvalueCutoff  # june 21 2020
+	#print(head(passIndevidualPvalue))
 	outNetwork = out[passIndevidualPvalue, , drop=FALSE]
-	#print(outNetwork)
+	#print(head(outNetwork))
 
 	#outNetwork$names<-rownames(outNetwork)
 	#splt = str_split_fixed(outNetwork$names, "<==>", 2)
@@ -603,8 +632,8 @@ generateNetwork = function(){
 		print(PUC_Prop)
 
 	    # keep PUC expected
-	    outNetwork = outNetwork[as.numeric(outNetwork[,"PUC"])==1 ,]
-		outNetwork = outNetwork[!is.na(as.numeric(outNetwork[,"PUC"])),] # remove the rows with 'NA' in PUC columns
+	    outNetwork = outNetwork[as.numeric(outNetwork[,"PUC"])==1 ,,drop=F]
+		outNetwork = outNetwork[!is.na(as.numeric(outNetwork[,"PUC"])),,drop=F] # remove the rows with 'NA' in PUC columns
 		write.csv (outNetwork,networkFile, quote=FALSE)
 		calc_stats(outNetwork, PUC_Prop)
      }

@@ -1,0 +1,7 @@
+partner1,partner2,corr
+a,b,0.8
+a,c,0.6
+b,c,0.4
+c,d,-0.75
+d,b,0.1
+e,z,0.1

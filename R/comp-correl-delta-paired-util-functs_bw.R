@@ -32,8 +32,12 @@
 
 # 9. Timelag Correl A and B (where A and B are different time points): 4 non-empty columns, 3rd column timelag, 4th column correlation [A	B	timelag	correlation]
 ## std. correlations: g1T1-g2T1 or g1T2-g2T2
-## calculate timelag correlations for g?T1-g?T2 : will take care of g1T1-g1T2, g1T1-g2T2, etc.
+## calculate timelag correlations for g?T1-g?T2
 ## for all gene pairs: give group 1 (T1) to first gene, group 2 (T2) to second gene
+## this works best when you have the same input gene list. The way I currently (pre aug 2020) calculate gene pairs for diff gene lists
+## may cause g1.t1 with g2.t2 but not g2.t1 with g1.t2,
+## be careful for time lag with diff gene lists, since the order of input list may matter for which gene in time 1 is correlated against which gene in time 2
+
 
 
 # the indexes allow creating a unique column which does not interfere with merge. merge likes to have unique column names.
@@ -369,11 +373,18 @@ calculatePartialCorrelationWFDR = function (genes, edata, c, dict, correlMethod,
 }
 
 
+## std. correlations: g1T1-g2T1 or g1T2-g2T2
+## calculate timelag correlations for g?T1-g?T2
+## for all gene pairs: give group 1 (T1) to first gene, group 2 (T2) to second gene
+## this works best when you have the same input gene list. The way I currently (pre aug 2020) calculate gene pairs for diff gene lists
+## may cause g1.t1 with g2.t2 but not g2.t1 with g1.t2,
+## be careful for time lag with diff gene lists, since the order of input list may matter for which gene in time 1 is correlated against which gene in time 2
+
 #==================================================================================================================
 #		Condition 9
 #==================================================================================================================
 #     function: calculate (timelag) correlation coefficient of a pair of genes (across two categories)
-#               calculate timelag correlations for g?T1-g?T2 : will take care of g1T1-g1T2, g1T1-g2T2, etc.
+#
 # input:
 #         1.pair: a pair of "gene"s:
 #                 value: a vector of length 2, containing names of the two "genes"
@@ -660,6 +671,66 @@ GetSimpleStats = function(lgene, edata, c1, c2, dict){
 		outLine
 }
 
+
+
+#==================================================================================================================
+#		Conditions 1 and 3
+#==================================================================================================================
+# function : "mean, std dev, numb samps" per group per analysis.
+# for 3.1.1.1 “Standard” effect size data (M, SD, N) from https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/data-preparation-in-excel.html
+# input:
+#    	  1. genes: for which to calculate the comparison
+#       2. expression data
+#	  3 & 4. the categories to compare
+#	  5. the dictionary containing mapping of category and samples which belong to it
+# output :
+#	vector of length 4: mean, std and numb of non NA samples per group
+
+Standard_effect_size_data = function(lgene, edata, c1, c2, dict){
+
+		#print(c1)
+		#print(c2)
+		idxs1 = as.vector(dict[[c1]])
+		idxs2 = as.vector(dict[[c2]])
+
+		#print(idxs1)
+		#print(idxs2)
+
+		c1 = as.vector(edata[lgene, idxs1])
+		c2 = as.vector(edata[lgene, idxs2])
+
+		c1 =  numericizeVector(c1)
+		#print(c1)
+		c2 = numericizeVector(c2)
+		#print(c2)
+
+		outLine = ''
+
+		mean_c1 = NA
+		mean_c2 = NA
+
+		std_c1 = NA
+		std_c2 = NA
+		
+		non_na_samps_c1 = sum(!is.na(c1))
+		non_na_samps_c2 = sum(!is.na(c2))
+ 
+		# there are at least 3 samples with values (i.e. without NA)
+		if(sum(!is.na(c1)) >= 3){
+		    mean_c1 = mean(c1, na.rm=TRUE)
+				std_c1 = sd(c1, na.rm=TRUE)
+		}
+
+		if(sum(!is.na(c2)) >= 3){
+		    mean_c2 = mean(c2, na.rm=TRUE)
+				std_c2 = sd(c2, na.rm=TRUE)
+		}
+		
+		outLine = as.matrix(c(non_na_samps_c1 , mean_c1, std_c1 , non_na_samps_c2 , mean_c2, std_c2))
+		outLine
+}
+
+
 #==================================================================================================================
 #		Conditions 1 and 3
 #==================================================================================================================
@@ -756,7 +827,7 @@ CalcCom = function(lgene, edata, c1, c2, dict, comparMethod, pairedd){
 		 			} else {
 			  			p = t.test(c1,c2)
 			  			#outLine = as.matrix(c(p$method,p$estimate,p$p.value))
-			  			outLine = as.matrix(c(p$method,mean_c1, mean_c2, fold_change_mean, median_c1 , median_c2 , fold_change_median, p$p.value, gm_c1 , gm_c2, fold_change_gm))
+			  			outLine = as.matrix(c(p$method, mean_c1, mean_c2, fold_change_mean, median_c1 , median_c2 , fold_change_median, p$p.value, gm_c1 , gm_c2, fold_change_gm))
 		  		}
 			} else if(comparMethod == 'mw'){
 					#p = wilcox.test(c1,c2,conf.int=T)
@@ -1006,6 +1077,27 @@ calculateComparison = function (lgenes, expressionData, c1, c2, dict, comparMeth
 
 	    # the genes become row names; and the method, meanx, meany, and pvalue are the column names
 	    out = t(out)
+			
+			if(FALSE){ # this printed file per analysis. Wrote a separate function so it will return one file with results of all analysis.
+						## ~~~~~~~~~~
+						## newly added function to spit out "mean, std dev, numb samps" per group per analysis.
+						## for 3.1.1.1 “Standard” effect size data (M, SD, N)
+						## from https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/data-preparation-in-excel.html
+						#formeta = sapply(lgenes, Standard_effect_size_data, expressionData, c1, c2, dict)
+
+				    ## the genes become row names; and the mean, std dev and n are the column names
+				    #formeta = t(formeta)
+						#colnames(formeta) = c(paste("Analys", indxg, "Numb_Non_NA_Samps", c1, sep=" "), 
+						#										  paste("Analys", indxg, "Mean", c1, sep=" "), 
+						#											paste("Analys", indxg, "Std_dev", c1, sep=" "), 
+						#											paste("Analys", indxg, "Numb_Non_NA_Samps", c2, sep=" "), 
+						#										  paste("Analys", indxg, "Mean", c2, sep=" "), 
+						#											paste("Analys", indxg, "Std_dev", c2, sep=" "))
+						#geneName = rownames(formeta)
+						#formeta = cbind(geneName,formeta)
+						#write.csv(formeta,paste0(outputFile, 'formeta-', "Analys-", indxg, "-output.csv"),row.names=FALSE)
+						## ~~~~~~~~~~
+			}
 
 	    # method used; # just take the first non-NA element
 	    #tmp_uniq = unique(out[,1])
@@ -1030,6 +1122,58 @@ calculateComparison = function (lgenes, expressionData, c1, c2, dict, comparMeth
 
     out
 }
+
+
+
+
+
+#==================================================================================================================
+#		Conditions 1 and 3,  Meta
+#==================================================================================================================
+
+
+# function : calculate mean, std dev and n for all genes using two categories to be used for meta with Hedge's G 
+# input:
+#    	  1. list of genes: for which to calculate the comparison
+#				2. expression data
+#	  3 & 4. the categories to compare
+#		# note that if there are multiple categories being comapred like an ANOVA
+#		# give the comparison as
+#		 	# ";" separated comparison as column1 e.g. "A_vs_B;C_vs_D"
+#  				## note that in each comparison "_vs_" separates the two categories being compared
+# 				## code replaces "_vs_" by "-" and then use to make contrasts
+#			# ";" separated categories as column2 e.g. "A;B;D;C"
+# 				## these are used to create the levels and column names
+#	  5. the dictionary containing mapping of category and samples which belong to it
+#         6. method for comparison (t test, Man Whitney, etc.)
+#         7. paired or unpaired
+# output :
+#	a table containing gene information, means in c1 and c2,std dev,n
+
+
+calculateComparisonMeta = function (lgenes, expressionData, c1, c2, dict, comparMethod, pairedd, indxg){
+
+  	formeta = ''
+
+    # newly added function to spit out "mean, std dev, numb samps" per group per analysis.
+		# for 3.1.1.1 “Standard” effect size data (M, SD, N)
+		# from https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/data-preparation-in-excel.html
+		formeta = sapply(lgenes, Standard_effect_size_data, expressionData, c1, c2, dict)
+
+    # the genes become row names; and the mean, std dev and n are the column names
+    formeta = t(formeta)
+		colnames(formeta) = c(paste("Analys", indxg, "Numb_Non_NA_Samps", c1, sep=" "), 
+												  paste("Analys", indxg, "Mean", c1, sep=" "), 
+													paste("Analys", indxg, "Std_dev", c1, sep=" "), 
+													paste("Analys", indxg, "Numb_Non_NA_Samps", c2, sep=" "), 
+												  paste("Analys", indxg, "Mean", c2, sep=" "), 
+													paste("Analys", indxg, "Std_dev", c2, sep=" "))
+		geneName = rownames(formeta)
+		formeta = cbind(geneName,formeta)
+		
+  	formeta
+}
+
 
 
 

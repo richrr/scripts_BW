@@ -16,6 +16,14 @@
 # Rscript /data/rodriguesrr/scripts/R/perform-analyses_bw.R ./data/abundanceTables/rnaseq-pool_RQ.limf.pheno.lipid.csv --lists ./data/lists/liver-fdr15.txt ./data/lists/liver-fdr15.txt --mapFile data/map/rnaseq-pool-diet.map.txt --mapFileSampleIdColName SampleID --AnalysToDoList data/analys_files/t2-diet-comp-corr.xlsx --comparMethod mw --correlMethod sp --dataFileSymbolColName ID --pairedInfoColumn TestPair
 
 
+#### time requirements:
+# norm: 50 Million corrs needed 78G Ram and 4 hrs with 64 cores
+# ccr: 90 Million corrs needed 127G Ram and 7 hrs with 64 cores
+
+
+### do not use:
+		### timelag with different input gene lists;
+		### freq calc results with different input gene lists
 
 # Allowed analyses (conditions):
 # add 4th column with "correlation" to indicate whatever operation is to be done, needs to be done on correlations
@@ -30,8 +38,11 @@
 ## no need to do paired in 8
 # 9. Timelag Correl A and B (where A and B are different time points): 4 non-empty columns, 3rd column timelag, 4th column correlation [A	B	timelag	correlation]
 ## std. correlations: g1T1-g2T1 or g1T2-g2T2
-## calculate timelag correlations for g?T1-g?T2 : will take care of g1T1-g1T2, g1T1-g2T2, etc.
+## calculate timelag correlations for g?T1-g?T2
 ## for all gene pairs: give group 1 (T1) to first gene, group 2 (T2) to second gene
+## this works best when you have the same input gene list. The way I currently (pre aug 2020) calculate gene pairs for diff gene lists
+## may cause g1.t1 with g2.t2 but not g2.t1 with g1.t2,
+## be careful for time lag with diff gene lists, since the order of input list may matter for which gene in time 1 is correlated against which gene in time 2
 
 #written for R/3.6
 
@@ -109,6 +120,7 @@ p <- add_argument(p, "--noCorrelationsRequested", help="no correlations calc. re
 p <- add_argument(p, "--skipDiffInputsCheck", help="does not quit if diff input check fails", flag=TRUE) # avoid using this
 p <- add_argument(p, "--writeCorrPerAnalysis", help="write files per analysis for correlations when requested. This will be set when the number of correlations per group is greater than 5 million", flag=TRUE)
 
+p <- add_argument(p, "--metaFixedRandomEffects", help="calc mean, std dev and n for meta which will later calc Hedges G and return fixed and random-effects model meta-analysis, only use with comparisons", flag=TRUE)
 
 
 
@@ -362,9 +374,13 @@ for(indx in 1:nrow(AnalysToDoList)){
       if(c[1] != "" && c[2] != "" && c[3] == "timelag" && c[4] == "correlation"){
         print("9")
 
-        # std. correlations: g1T1-g2T1 or g1T2-g2T2
-        # calculate timelag correlations for g?T1-g?T2 : will take care of g1T1-g1T2, g1T1-g2T2, etc.
-        # for all gene pairs: give group 1 (T1) to first gene, group 2 (T2) to second gene
+        ## std. correlations: g1T1-g2T1 or g1T2-g2T2
+				## calculate timelag correlations for g?T1-g?T2
+				## for all gene pairs: give group 1 (T1) to first gene, group 2 (T2) to second gene
+				## this works best when you have the same input gene list. The way I currently (pre aug 2020) calculate gene pairs for diff gene lists
+				## may cause g1.t1 with g2.t2 but not g2.t1 with g1.t2,
+				## be careful for time lag with diff gene lists, since the order of input list may matter for which gene in time 1 is correlated against which gene in time 2
+
         categ1= paste( ColHead, toString(c[1,1]) , sep=COLHEADGRPSEP)
         categ2= paste( ColHead, toString(c[1,2]) , sep=COLHEADGRPSEP)
         checkPairing(categ1, categ2, dict, mapFile, argv$pairedInfoColumn, samplIdCol)
@@ -405,8 +421,19 @@ if(!argv$noCorrelationsRequested){
 		pairs = t(combn(genes1,2))[,2:1]
 			# use below for testing purposes and/or when calculating partial correlation # has same gene pairs (e.g. gene1 gene1)
 			#pairs = combinations(length(unique(genes1)), 2, genes1, repeats.allowed=TRUE) # from https://gist.github.com/randy3k/10015496 for testing purposes
-	}else{
-		pairs = expand.grid(genes1,genes2)  # does genes1 x genes2 pairs ## not sure about this-> this has all the above & their opposite (e.g. gene1 gene2 and gene2 gene1) & same gene pairs (e.g. gene1 gene1)
+	}else{ # be careful for time lag with diff gene lists, since the order of input list may matter for which gene in time 1 is correlated against which gene in time 2
+		pairs = expand.grid(genes1,genes2)  # does genes1 x genes2 pairs, but in timelag (where gene list order matters),
+		## it may not do gene list 2 time 1 with gene list 1 time 2
+
+		## std. correlations: g1T1-g2T1 or g1T2-g2T2
+		## calculate timelag correlations for g?T1-g?T2
+		## for all gene pairs: give group 1 (T1) to first gene, group 2 (T2) to second gene
+		## timelag works best when you have the same input gene list. The way I currently (pre aug 2020) calculate gene pairs for diff gene lists
+		## may cause g1.t1 with g2.t2 but not g2.t1 with g1.t2,
+		## be careful for time lag with diff gene lists, since the order of input list may matter for which gene in time 1 is correlated against which gene in time 2
+
+
+		## not sure about this-> this has all the above & their opposite (e.g. gene1 gene2 and gene2 gene1) & same gene pairs (e.g. gene1 gene1)
 	}
 	#write.csv(pairs,pairFile,row.names=FALSE)
 	#file.remove("./testpair.txt")
@@ -520,25 +547,6 @@ checkDiffInputs(unique(uniq_analys_elems[uniq_analys_elems != ""]), CHeadsSampsV
 
 
 
-calcFC = function(v1 , v2){
-    v1 = as.numeric(as.vector(v1))
-    v2 = as.numeric(as.vector(v2))
-
-    FC = c()
-    for(i in 1:length(v1)){
-        if(is.na(v1[i]) || is.na(v2[i])){
-            FC = c(FC, NA)
-        }else{
-            fc = as.numeric(v1[i])/as.numeric(v2[i])
-            FC = c(FC, fc)
-        }
-    }
-
-    return(FC)
-}
-
-
-
 # write corr output to file per analysis.
 write_to_File_CorrPerAnalysis = function(corroutPerA, idx){
 	write.csv(corroutPerA,paste0(outputFile,'Analys-',idx,"-corr-output.csv"),row.names=FALSE)
@@ -549,6 +557,7 @@ n=0 # total number of analysis # this may not be accurate anymore since I stoppe
 
 corrout = c()
 compout = c()
+compoutMeta = c()
 #folchout = c()
 
 
@@ -595,16 +604,19 @@ for(indx in 1:nrow(AnalysToDoList)){
 					compout <<- merge(compout,outEachExperiment,sort=FALSE,by=1)
         } # end else
 
-        # calculate fold change
-        #FolCh =  calcFC(outEachExperiment[,5],outEachExperiment[,6]) # median to calc FC
-        #FolCh = t(rbind(outEachExperiment[,1], t(FolCh)))
-        #colnames(FolCh) = c(colnames(outEachExperiment)[1],paste(categ1,"vs",categ2,"FoldChange",sep=" "))
 
-        #if (length(folchout)==0){
-					#folchout <<- FolCh
-        #}else{
-					#folchout <<- merge(folchout,FolCh,sort=FALSE,by=1)
-        #} # end else
+				# calculate mean, std dev and n for running meta later based on Hedge's G
+				if(argv$metaFixedRandomEffects){
+					outEachExperimentMeta = calculateComparisonMeta(genes, expressionData, categ1, categ2, dict, argv$comparMethod, c[3], indx)
+					#print(head(outEachExperimentMeta))
+
+					if (length(compoutMeta)==0){
+						compoutMeta <<- outEachExperimentMeta
+					}else{
+						compoutMeta <<- merge(compoutMeta,outEachExperimentMeta,sort=FALSE,by=1)
+					} # end else
+				}
+
 
 				RunFreqAnalys = 1
 				next
@@ -651,15 +663,6 @@ for(indx in 1:nrow(AnalysToDoList)){
 						compout <<- merge(compout,outEachExperiment,sort=FALSE,by=1)
 				} # end else
 
-        # calculate fold change
-        #FolCh = outEachExperiment[,c(1,7)]
-        #colnames(FolCh) = c(colnames(outEachExperiment)[1],paste(categA,"vs",categB,"FoldChange",sep=" "))
-
-        #if (length(folchout)==0){
-	    		#folchout <<- FolCh
-        #}else{
-	    		#folchout <<- merge(folchout,FolCh,sort=FALSE,by=1)
-        #} # end else
 
 				RunFreqAnalys = 1
 				next
@@ -689,16 +692,19 @@ for(indx in 1:nrow(AnalysToDoList)){
 	    		compout <<- merge(compout,outEachExperiment,sort=FALSE,by=1)
         } # end else
 
-        # calculate fold change
-        #FolCh =  calcFC(outEachExperiment[,5],outEachExperiment[,6]) # median to calc FC
-        #FolCh = t(rbind(outEachExperiment[,1], t(FolCh)))
-        #colnames(FolCh) = c(colnames(outEachExperiment)[1],paste(categ1,"vs",categ2,"FoldChange",sep=" "))
 
-        #if (length(folchout)==0){
-	    		#	folchout <<- FolCh
-        #}else{
-	    		#	folchout <<- merge(folchout,FolCh,sort=FALSE,by=1)
-        #} # end else
+				# calculate mean, std dev and n for running meta later based on Hedge's G
+				if(argv$metaFixedRandomEffects){
+					outEachExperimentMeta = calculateComparisonMeta(genes, expressionData, categ1, categ2, dict, argv$comparMethod, c[3], indx)
+					#print(head(outEachExperimentMeta))
+
+					if (length(compoutMeta)==0){
+						compoutMeta <<- outEachExperimentMeta
+					}else{
+						compoutMeta <<- merge(compoutMeta,outEachExperimentMeta,sort=FALSE,by=1)
+					} # end else
+				}
+
 
 				RunFreqAnalys = 1
 				next
@@ -904,7 +910,9 @@ if(! argv$writeCorrPerAnalysis){
 }
 
 write.csv(compout,paste(outputFile,"output.csv",sep='comp-'),row.names=FALSE)
-#write.csv(folchout,paste(outputFile,"output.csv",sep='folch-'),row.names=FALSE)
+if(argv$metaFixedRandomEffects){
+	write.csv(compoutMeta,paste(outputFile,"formeta-output.csv",sep='comp-'),row.names=FALSE)
+}
 
 print("Finished performing the requested analyses.")
 
@@ -925,9 +933,13 @@ if(RunFreqAnalys==1){
 	freqcmd= paste("Rscript /data/rodriguesrr/scripts/R/calc-frequency_bw.R", argv$expressionDataFile, "--lists", list1File, list1File, "--mapFile", argv$mapFile, "--mapFileSampleIdColName", samplIdCol, "--AnalysToDoList", argv$AnalysToDoList, "--comparMethod",  argv$comparMethod, "--correlMethod", argv$correlMethod, "--symbolColumnName", symbleColumnName, "--pairedInfoColumn", argv$pairedInfoColumn, "--output", freqdir, "--stringtorelativize", argv$stringtorelativize, sep=" ")
 
 	print(freqcmd)
-	system(freqcmd, wait=TRUE)
 
-	print("Finished performing the requested frequency analyses.")
+	if(list1File == list2File){
+		system(freqcmd, wait=TRUE)
+		print("Finished performing the requested frequency analyses.")
+	} else{
+		print("Did NOT run the requested frequency analyses since the input gene lists are different and not sure which to use.")
+	}
 
 }
 

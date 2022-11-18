@@ -7,7 +7,7 @@
 
 # Usage: Rscript /data/rodriguesrr/scripts/R/merge-comp-correl-result-files_bw.R --files network_spearm-manwhit_expt1_comp-output.csv network_spearm-manwhit_expt2_comp-output.csv --parallel --output merged_two_expts_sp_mw_files_comp_all_
 
-
+# Rscript /data/rodriguesrr/scripts/R/merge-comp-correl-result-files_bw.R --files GSE26637/mw-comp-formeta-output.csv GSE20950/mw-comp-formeta-output.csv --parallel --output out_ --metaFixedRandomEffects
 #written for R/3.6
 
 
@@ -22,7 +22,7 @@ checkInstallAndLoadRlibs = function(lib, pathRlibs){
 	require(lib, , lib.loc = pathRlibs, character.only = TRUE)
 }
 
-libraries <- c("argparser", "hash", "psych", "gtools", "corpcor", "reshape", "doParallel", "readxl", "tools", "stringr")
+libraries <- c("argparser", "hash", "psych", "gtools", "corpcor", "reshape", "doParallel", "readxl", "tools", "meta", "stringr")
 uname = Sys.getenv(c("USER"))
 pathRlibs = paste0("/data/",uname, "/R_LIBS")
 print(pathRlibs)
@@ -66,12 +66,15 @@ p <- add_argument(p, "--combFDRCutoff", help="combinedFDRCutoff", default=0.1, t
 
 p <- add_argument(p, "--warnings", help="print warnings", flag=TRUE)
 p <- add_argument(p, "--foldchMean", help="use fold change from mean", flag=TRUE)  # default fold change is median
+p <- add_argument(p, "--foldchGeoMean", help="use fold change from mean", flag=TRUE)  # default fold change is median
 p <- add_argument(p, "--transposeOutput", help="tranpose the results so the rows are analysis and columns are gene or pairs", flag=TRUE)  # easier for downstream grep of required analysis, do not use when you expect many genes or pairs since it might truncate when you open in excel or librecalc due ot limited columns
 
 p <- add_argument(p, "--runfreqmerge", help="run merging for freq. use only for genes NOT pairs", flag=TRUE)
 
 p <- add_argument(p, "--multicore", help="run merging in multicore/multiprocessors", flag=TRUE)
 p <- add_argument(p, "--cores", help="use these many cores", default=8, type="numeric") # do not use more than 8. overhead of parallelization gives little speed up above 8 cores.
+
+p <- add_argument(p, "--metaFixedRandomEffects", help="run meta, calc Hedges G and return fixed and random-effects model meta-analysis, only use with comparisons where the results from perf analy give n, mean, std dev", flag=TRUE)
 
 
 argv <- parse_args(p)
@@ -99,6 +102,12 @@ foldchThreshold = argv$foldchThreshold
 combinedPvalueCutoff = argv$combPvalCutoff
 combinedFDRCutoff = argv$combFDRCutoff
 
+if(argv$metaFixedRandomEffects){
+	pvalThreshold = 1
+	combinedPvalueCutoff = 1
+	combinedFDRCutoff = 1
+}
+
 # create if outdir doesn't exist:
 res_directory = paste(c("./p", pvalThreshold, "_cp", combinedPvalueCutoff, "_cfdr", combinedFDRCutoff, "/"), collapse='')
 dir.create(paste(res_directory, "per_analysis", sep=''), recursive = TRUE)
@@ -107,6 +116,15 @@ outputFile = paste(res_directory, outputFile, sep='')
 
 foldchVar = 'FolChMedian'
 if(argv$foldchMean){foldchVar = "FoldChange"}
+if(argv$foldchGeoMean){foldchVar = "FolChGeoMean"}
+if(argv$metaFixedRandomEffects){
+	foldchVar = "meta"
+}
+
+
+
+
+
 
 outputFile = paste(outputFile , foldchVar, '_', sep='')
 
@@ -139,6 +157,8 @@ for( numb in 1:length(argv$files)){
        quit()
    }
 }
+
+
 
 
 #------------------------------------
@@ -177,6 +197,8 @@ df = intersect_rows_df
 if(argv$pvals){
 outputFile = paste(outputFile, "only-pvals-", sep = '_')
 }
+
+
 
 
 #------------------------------------------------------------------
@@ -228,10 +250,12 @@ if(!argv$parallel){
 
 
 
+
 if(argv$pvals){
     print("Cannot check for change in direction without FoldChange or Coefficient columns. Do NOT use '--pvals'. I quit!")
     quit()
 }
+
 
 
 
@@ -371,6 +395,7 @@ calc_comb_pval_fdr = function(in_df, total_numb_input_files, l_outputFile, apply
 
 
 
+
 #------------------------------------------------------------------
 # re-read the merged file as a dataframe
 #------------------------------------------------------------------
@@ -402,14 +427,6 @@ if(argv$pvals){
 }
 
 
-#------------------------------------------------------------------
-# calculates the combined fisher p value for each gene for each comparison
-# it does not care about the gene being consistent in either FC dir or pval significance.
-# calcs. FDR. Of course once you keep consistent genes, you may have to recalc fdr but NOT combined pvalue
-#------------------------------------------------------------------
-calc_comb_pval_fdr(merged_df, total_numb_input_files, outputFile)
-
-
 
 
 #------------------------------------------------------------------
@@ -420,6 +437,218 @@ find_analysis_number = function(x){
    res = str_match(x, "Analys ([0-9]+-?[0-9]*) .*")[,2]
    res
 }
+
+
+
+
+#############################################################################################
+#-----------
+# does the actual meta analysis for fixed and random effect models
+#-----------
+ret_results_meta_FixedRandom_Effects = function(datasetDF){
+
+	dataset = datasetDF$Dataset
+	# https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/fixed.html
+	# https://bookdown.org/MathiasHarrer/Doing_Meta_Analysis_in_R/random.html
+	# DerSimonian-Laird, It is the default option in the meta package in R 
+	#  is prone to producing false positives (IntHout, Ioannidis, and Borm 2014). 
+	# This is especially the case when the number of studies is small, and when there is substantial heterogeneity
+
+	# https://www.rdocumentation.org/packages/meta/versions/4.9-9/topics/metacont
+	# Internally, both fixed effect and random effects models are calculated regardless of values choosen for arguments comb.fixed and comb.random
+
+	m.raw <- metacont(Ne, Me, Se, Nc, Mc, Sc, data=datasetDF, studlab=paste(dataset), comb.fixed = TRUE, comb.random = TRUE, prediction=TRUE, sm="SMD")
+	
+	# zval, pval: z-value and p-value for test of treatment effect for individual studies.
+	# w.fixed, w.random: Weight of individual studies (in fixed and random effects model).
+	# Q: Heterogeneity statistic Q.
+	# df.Q: Degrees of freedom for heterogeneity statistic.
+	# pval.Q: P-value of heterogeneity test.
+	# I2: Heterogeneity statistic I.
+	# tau2: Between-study variance .
+	# tau: Square-root of between-study variance .
+	# lower.I2, upper.I2: Lower and upper confidence limit for heterogeneity statistic I.
+	# H: Heterogeneity statistic H.
+	# lower.H, upper.H: Lower and upper confidence limit for heterogeneity statistic H.
+
+	# TE, seTE: Estimated treatment effect and standard error of individual studies.
+	# lower, upper: Lower and upper confidence interval limits for individual studies.
+	
+	# TE.fixed, seTE.fixed: Estimated overall treatment effect and standard error (fixed effect model).
+	# lower.fixed, upper.fixed: Lower and upper confidence interval limits (fixed effect model).
+	# zval.fixed, pval.fixed: z-value and p-value for test of overall treatment effect (fixed effect model).
+
+
+	# TE.random, seTE.random: Estimated overall treatment effect and standard error (random effects model).
+	#	lower.random, upper.random: Lower and upper confidence interval limits (random effects model).
+	# zval.random, pval.random: z-value or t-value and corresponding p-value for test of overall treatment effect (random effects model).
+
+
+	#tmp_res = c(paste0("TE_", Dataset), paste0("lower_", Dataset), paste0("upper_", Dataset), 
+	#							paste0("w.absolute.fixed_", Dataset), paste0("w.percentage.fixed_", Dataset),
+	#							"TE.fixed", "lower.fixed", "upper.fixed", "zval.fixed", "pval.fixed",
+	#							"Tau2", "Tau", "I2%", "H", "Q", "df.Q", "pval.Q", 
+	#							paste0("w.absolute.random_", Dataset), paste0("w.percentage.random_", Dataset),
+	#							"TE.random", "lower.random", "upper.random", "zval.random", "pval.random")
+	#print(tmp_res)
+	
+	
+	vals = c(unlist(m.raw["TE"], use.names=FALSE), 
+					unlist(m.raw["lower"], use.names=FALSE), 
+					unlist(m.raw["upper"], use.names=FALSE), 
+						as.vector(weights(m.raw)$w.fixed), as.vector(weights(m.raw)$p.fixed),
+						unlist(m.raw["TE.fixed"], use.names =FALSE), 
+						unlist(m.raw["lower.fixed"], use.names =FALSE), 
+						unlist(m.raw["upper.fixed"], use.names =FALSE), 
+						unlist(m.raw["zval.fixed"], use.names =FALSE), 
+						unlist(m.raw["pval.fixed"], use.names =FALSE),
+						
+						unlist(m.raw["tau2"], use.names =FALSE), 
+						unlist(m.raw["tau"], use.names =FALSE), 
+						unlist(m.raw["I2"], use.names =FALSE)*100, 
+						unlist(m.raw["H"], use.names =FALSE), 
+						unlist(m.raw["Q"], use.names =FALSE),
+						unlist(m.raw["df.Q"], use.names =FALSE), 
+						unlist(m.raw["pval.Q"], use.names =FALSE), 
+						
+						as.vector(weights(m.raw)$w.random), as.vector(weights(m.raw)$p.random),
+						unlist(m.raw["TE.random"], use.names =FALSE), 
+						unlist(m.raw["lower.random"], use.names =FALSE), 
+						unlist(m.raw["upper.random"], use.names =FALSE), 
+						unlist(m.raw["zval.random"], use.names =FALSE), 
+						unlist(m.raw["pval.random"], use.names =FALSE))
+	vals = cbind(vals)
+						
+	#print(vals)
+
+	#print(m.raw)	
+	#print(names(m.raw))
+	
+	#print(m.raw["TE"])
+	#print(m.raw["lower"])
+	#print(m.raw["upper"])
+
+	#print(weights(m.raw))
+	
+	#print(m.raw["TE.fixed"])
+	#print(m.raw["lower.fixed"])
+	#print(m.raw["upper.fixed"])
+
+
+	#print(m.raw["zval.fixed"])
+	#print(m.raw["pval.fixed"])
+	#print(m.raw["zval.random"])
+	#print(m.raw["pval.random"])
+
+
+	#print(m.raw["TE.random"])
+	#print(m.raw["lower.random"])
+	#print(m.raw["upper.random"])
+	
+	return(vals)
+}
+
+
+
+
+calc_meta_FixedRandom_Effects = function(lgene, in_df, total_numb_input_files, Dataset){ # , l_outputFile
+	ldata  = in_df[lgene, ]
+	#print(ldata)
+	
+	BIGDF = NULL
+	for(z in 1:total_numb_input_files){
+				 tmpdf = ldata[lgene, grep( paste0("_Expt_",z,"$"), colnames(ldata), value=T)]
+				 colnames(tmpdf) = c("Ne", "Me", "Se", "Nc", "Mc", "Sc")
+				 #print(tmpdf)
+				 
+				 if(is.null(nrow(BIGDF))){
+				 		BIGDF = tmpdf
+				 } else{
+				 		BIGDF = rbind(BIGDF, tmpdf)
+				 }	 
+	}
+	#Dataset = paste0("Expt_", rep(1:total_numb_input_files))
+	BIGDF = cbind(Dataset, BIGDF)
+	#print(BIGDF)
+
+	get_vals = ret_results_meta_FixedRandom_Effects(BIGDF)
+	get_vals
+}
+
+
+
+
+if(argv$metaFixedRandomEffects)
+{
+		#print(head(merged_df))
+		merged_df_of_meta_results = c()
+		Dataset = paste0("Expt_", rep(1:total_numb_input_files))
+		
+		#print(Dataset)
+		
+		cols_processed = 1
+		while(cols_processed < ncol(merged_df))  # loop over the merged dataset in steps of (number of input files)
+		{
+		   subset_df = merged_df[,cols_processed:(cols_processed+(6*total_numb_input_files)-1)]
+		   cols_processed = cols_processed + (6*total_numb_input_files) # n , mean, std dev for both groups
+			 #print(cols_processed)
+			 #print(head(subset_df))
+			 
+			 resl=unique(unlist(lapply(colnames(subset_df), find_analysis_number)))
+			 print(resl)
+
+			 out = sapply(rownames(subset_df), calc_meta_FixedRandom_Effects, subset_df, total_numb_input_files, Dataset)
+			 out = t(out)
+			 tmp_res = c(paste0("TE_", Dataset), paste0("lower_", Dataset), paste0("upper_", Dataset), 
+			 							paste0("w.absolute.fixed_", Dataset), paste0("w.percentage.fixed_", Dataset),
+			 							"TE.fixed", "lower.fixed", "upper.fixed", "zval.fixed", "pval.fixed",
+			 							"Tau2", "Tau", "I2%", "H", "Q", "df.Q", "pval.Q", 
+			 							paste0("w.absolute.random_", Dataset), paste0("w.percentage.random_", Dataset),
+			 							"TE.random", "lower.random", "upper.random", "zval.random", "pval.random")
+			 colnames(out) = tmp_res			 
+			 ID = rownames(out)
+			 out=cbind(ID, out)
+			 print(head(out))
+			 
+			 analysesnumb = paste(c("Analys ", resl, " "), collapse='')
+			 o_f_name_comb_meta = gsub(' ' , '', paste(res_directory, "per_analysis/",analysesnumb, "-fixed-random-model-metares.csv", sep=''))
+			 write.csv(out, o_f_name_comb_meta, row.names=F, quote=F)
+			 
+			 colnames(out) = paste0( analysesnumb, colnames(out) )
+			 if (length(merged_df_of_meta_results)==0){
+					 merged_df_of_meta_results <<- out
+			 }else{
+					 merged_df_of_meta_results <<- merge(merged_df_of_meta_results,out,sort=FALSE,by=1)
+			 }
+			 
+		}
+
+		print(head(merged_df_of_meta_results))
+		write.csv(merged_df_of_meta_results, paste(outputFile,"fixed-random-model-metaanalys_output.csv",sep='-'), row.names=F, quote=F)
+		print("Finished performing the requested analyses.")
+		print("Did Hedge's G based fixed and random effect meta-analysis.")
+		print("Did not do the Fisher based analysis since you gave --metaFixedRandomEffects")
+		q()
+
+}
+
+
+#############################################################################################
+
+
+
+
+
+
+
+
+#------------------------------------------------------------------
+# calculates the combined fisher p value for each gene for each comparison
+# it does not care about the gene being consistent in either FC dir or pval significance.
+# calcs. FDR. Of course once you keep consistent genes, you may have to recalc fdr but NOT combined pvalue
+#------------------------------------------------------------------
+calc_comb_pval_fdr(merged_df, total_numb_input_files, outputFile)
+
 
 
 
@@ -454,6 +683,7 @@ CalcCombPvalFdrPerAnalysis = function(l_strr, consis_elem, merged_df, analys_typ
   }
 
 }
+
 
 
 
@@ -669,12 +899,12 @@ while(cols_processed < ncol(merged_df))  # loop over the merged dataset in steps
        out_res = list()
        out_res$name = colnames(subset_df) #paste(colnames(subset_df), collapse='<-->')
 
-	   tmp_tmp = ''
-	   if(argv$multicore){
-			tmp_tmp = checkConsistency_across_expts_parallel(subset_df, "Coefficient", total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
-	   } else {
-			tmp_tmp = checkConsistency_across_expts(subset_df, "Coefficient", total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
-	   }
+		   tmp_tmp = ''
+		   if(argv$multicore){
+				tmp_tmp = checkConsistency_across_expts_parallel(subset_df, "Coefficient", total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
+		   } else {
+				tmp_tmp = checkConsistency_across_expts(subset_df, "Coefficient", total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
+		   }
 
        out_res = append(out_res, tmp_tmp)
        #result_dumper = append(result_dumper, in_cols)
@@ -694,12 +924,12 @@ while(cols_processed < ncol(merged_df))  # loop over the merged dataset in steps
        out_res = list()
        out_res$name = colnames(subset_df) #paste(colnames(subset_df), collapse='<-->')
 
-	   tmp_tmp = ''
-	   if(argv$multicore){
-			tmp_tmp = checkConsistency_across_expts_parallel(subset_df, foldchVar, total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
-	   } else {
-			tmp_tmp = checkConsistency_across_expts(subset_df, foldchVar, total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
-	   }
+		   tmp_tmp = ''
+		   if(argv$multicore){
+				tmp_tmp = checkConsistency_across_expts_parallel(subset_df, foldchVar, total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
+		   } else {
+				tmp_tmp = checkConsistency_across_expts(subset_df, foldchVar, total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
+		   }
 
        out_res = append(out_res, tmp_tmp)
        #result_dumper = append(result_dumper, in_cols)
@@ -710,12 +940,12 @@ while(cols_processed < ncol(merged_df))  # loop over the merged dataset in steps
        out_res = list()
        out_res$name = colnames(subset_df) #paste(colnames(subset_df), collapse='<-->')
 
-	   tmp_tmp = ''
-	   if(argv$multicore){
-			tmp_tmp = checkConsistency_across_expts_parallel(subset_df, "DiffCorrs", total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
-	   } else {
-			tmp_tmp = checkConsistency_across_expts(subset_df, "DiffCorrs", total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
-	   }
+		   tmp_tmp = ''
+		   if(argv$multicore){
+				tmp_tmp = checkConsistency_across_expts_parallel(subset_df, "DiffCorrs", total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
+		   } else {
+				tmp_tmp = checkConsistency_across_expts(subset_df, "DiffCorrs", total_numb_input_files, correlThreshold , pvalThreshold, foldchThreshold)
+		   }
 
        out_res = append(out_res, tmp_tmp)
        #result_dumper = append(result_dumper, in_cols)

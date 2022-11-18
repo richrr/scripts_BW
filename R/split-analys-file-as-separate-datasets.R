@@ -1,5 +1,11 @@
 library(argparser)
 
+#cd /data/Goldszmid_Lab/analysis/collab_evangelos/JAMS/JAMSbeta/manual_plots/TransNet/analys/comp/
+#ml R/3.6.0
+# split per analysis
+#Rscript /data/rodriguesrr/scripts/R/split-analys-file-as-separate-datasets.R --file mw_comp-output.csv --outstr analys_as_dataset_
+
+
 # uage: cd /nfs3/PHARM/Morgun_Lab/richrr/Type2_Diabetes/RNA-Seq/analysis/summarize_per_sample/relativised/brb-16s-improv-expts/9-11-2018/16s-improv-expts-rnaseq-network
 # Rscript ~/Morgun_Lab/richrr/scripts/R/split-analys-file-as-separate-datasets.R --file RQ/poolexpt/ile/sp_corr-output.csv --outstr poolexpt_meta_microbe_ile
 #==================================================================================================================

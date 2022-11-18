@@ -45,11 +45,9 @@ relativize_multply_million = function(infile){
 }
 
 
-relativize(args[1])
-
-relativize_multply_million(args[1])
-
-
-
-
-
+for(infl in args)
+{
+  print(infl)
+  relativize(infl)
+  relativize_multply_million(infl)
+}
