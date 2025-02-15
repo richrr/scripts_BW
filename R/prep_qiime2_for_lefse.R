@@ -52,7 +52,7 @@ write.table(fdf, paste0(args[1], ".for.lefse.tsv"), sep="\t", col.names=F, quote
 
 # build shell command file
 #cmd = "#!/bin/bash\nexport TMPDIR=/lscratch/\\$SLURM_JOB_ID\n\nmodule load lefse\n"
-cmd = "\nmodule load lefse\n"
+cmd = "\n#run 'unset R_LIBS' with quotes on the terminal \nml R/4.3.0\nml python/3.10\nmodule load lefse/1.0.8\n"
 if(length(mapcols) == 1){
     cmd = paste0(cmd, "format_input.py ", args[1], ".for.lefse.tsv" , " ", args[1], ".lefse.in", " -c 1 -u 2 -o 1000000")
 } else if(length(mapcols) == 2){

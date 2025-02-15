@@ -4,6 +4,7 @@ library(argparser)
 #ml R/3.6.0
 # split per analysis
 #Rscript /data/rodriguesrr/scripts/R/split-analys-file-as-separate-datasets.R --file mw_comp-output.csv --outstr analys_as_dataset_
+#Rscript /data/rodriguesrr/scripts/R/split-analys-file-as-separate-datasets.R --file tt_comp-formeta-output.csv --outstr analys_as_dataset_ --metaFixedRandomEffects
 
 
 # uage: cd /nfs3/PHARM/Morgun_Lab/richrr/Type2_Diabetes/RNA-Seq/analysis/summarize_per_sample/relativised/brb-16s-improv-expts/9-11-2018/16s-improv-expts-rnaseq-network
@@ -17,6 +18,7 @@ p <- add_argument(p, "--output", help="output file", default="_dataset_")
 #p <- add_argument(p, "--pergrdataset", help="datasets (expts) per group", default=2, type="numeric")
 #p <- add_argument(p, "--corrmethod", help="correlation method used", default="Spearman")
 p <- add_argument(p, "--outstr", help="analysis number and name for new group", default="newgroup")
+p <- add_argument(p, "--metaFixedRandomEffects", help="infile has calc mean, std dev and n for meta which will later calc Hedges G and return fixed and random-effects model meta-analysis, only use with comparisons", flag=TRUE)
 
 
 argv <- parse_args(p)
@@ -44,6 +46,11 @@ if(number_of_new_datasets == 0){ # comp file
 	number_of_new_datasets = length(grep('FolChMedian', colnames(df), value=T))
 	columns_to_keep = 11
 	Id = 'geneName'
+	
+	if(argv$metaFixedRandomEffects){
+		number_of_new_datasets = (length(grep(' Std_dev ', colnames(df), value=T))) / 2  # since each analysis has two std dev entries
+		columns_to_keep = 6
+	}
 }
 
 # keep columns depending on number of expts per group

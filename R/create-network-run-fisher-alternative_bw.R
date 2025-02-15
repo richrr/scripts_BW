@@ -17,7 +17,7 @@ checkInstallAndLoadRlibs = function(lib, pathRlibs){
 
 libraries <- c("argparser", "stringr", "meta", "doParallel")
 uname = Sys.getenv(c("USER"))
-pathRlibs = paste0("/data/",uname, "/R_LIBS")
+pathRlibs = paste0("/data/",uname, "/rlibs")  # R_LIBS
 print(pathRlibs)
 ifelse(!dir.exists(pathRlibs), dir.create(pathRlibs), FALSE)
 
@@ -68,6 +68,11 @@ p <- add_argument(p, "--sampSizes", help="comma separated, no spaces allowed") #
 p <- add_argument(p, "--multicore", help="run merging in multicore/multiprocessors", flag=TRUE)
 p <- add_argument(p, "--cores", help="use these many cores", default=8, type="numeric") # do not use more than 8. overhead of parallelization gives little speed up above 8 cores.
 
+# dec 8 2023:
+p <- add_argument(p, "--minPosCoeff", help="min Pos Corr Coeff. keep coeff >= minPosCoeff", default=0, type="numeric") # 
+p <- add_argument(p, "--minNegCoeff", help="absolute value for min Neg Corr Coeff. give 0.4, not -0.4 since it may throw error. it will internally convert 0.4 to -0.4
+											will keep abs(coeff) >= abs(minNegCoeff), so for minNegCoeff of -0.4 (given as minNegCoeff 0.4 ) you want to keep -0.5, but not -0.3", default=0, type="numeric") # 
+
 
 argv <- parse_args(p)
 #print (p)
@@ -98,6 +103,9 @@ foldchVar = 'FolChMedian'
 if(argv$foldchMean){foldchVar = "FoldChange"}
 if(argv$foldchGeoMean){foldchVar = "FolChGeoMean"}
 outputFile = paste(outputFile , foldchVar, '_', sep='')
+
+minPosCoeffCutoff = argv$minPosCoeff
+minNegCoeffCutoff = -1*argv$minNegCoeff
 
 
 # allows multiple cores if the multi core flag is true
@@ -450,8 +458,6 @@ forPUC = function(FoldChangeMetabolic,noPUC){
 	}
 
 
-
-
 	names(IfFoldChangeDirectionMatch) = c()
 	colnames(matchedExpressionDirection) = c()
 
@@ -681,24 +687,46 @@ generateNetwork = function(){
 	write.csv(outNetwork,paste0(networkFile,"-prePUCcut.csv"), quote=FALSE)
 	#print(head(outNetwork))
 
-	 if(noPUC){
-	    # do nothing
-     } else {
-		# find puc after pval, cp, fdr cuts
-		DEN = length(outNetwork[,"PUC"])
-		NUM = DEN - length(outNetwork[as.numeric(outNetwork[,"PUC"])==1, "PUC"])
-		PUC_Prop = as.numeric(NUM*100/DEN)
-		print("PUC after the ip, fisher, fd cuts:")
-		print(PUC_Prop)
+		#-------#
+		outNetworkwCoeffCuts = NULL
+		if( (minPosCoeffCutoff != 0) || (minNegCoeffCutoff != 0) ){
 
-	    # keep PUC expected
-	    outNetwork = outNetwork[as.numeric(outNetwork[,"PUC"])==1 ,,drop=F]
-		outNetwork = outNetwork[!is.na(as.numeric(outNetwork[,"PUC"])),,drop=F] # remove the rows with 'NA' in PUC columns
-		write.csv (outNetwork,networkFile, quote=FALSE)
-		calc_stats(outNetwork, PUC_Prop)
-     }
+				outNetworkwCoeffCuts1 = outNetwork[which( (abs(as.numeric(outNetwork[,"combinedCoefficient"])) >= abs(minNegCoeffCutoff)) &  (as.numeric(outNetwork[,"combinedCoefficient"]) < 0) ), ] 
+				outNetworkwCoeffCuts2 = outNetwork[which(as.numeric(outNetwork[,"combinedCoefficient"]) >= minPosCoeffCutoff), ]
 
-	#print(head(outNetwork))
+				outNetworkwCoeffCuts = rbind(outNetworkwCoeffCuts1, outNetworkwCoeffCuts2)
+				write.csv(outNetworkwCoeffCuts, paste0(networkFile, "_PosCoeffCut_", minPosCoeffCutoff, "_NegCoeffCut_", minNegCoeffCutoff, "-prePUCcut.csv"), quote=FALSE)
+
+		}
+
+
+		find_PUC_now = function(inpDF, outnetFile){
+		    DEN = length(inpDF[,"PUC"])
+		    NUM = DEN - length(inpDF[as.numeric(inpDF[,"PUC"])==1, "PUC"])
+		    PUC_Prop = as.numeric(NUM*100/DEN)
+		    print("PUC after the ip, fisher, fd cuts:")
+		    print(PUC_Prop)
+
+		     # keep PUC expected
+		    inpDF = inpDF[as.numeric(inpDF[,"PUC"])==1 ,,drop=F]
+		    inpDF = inpDF[!is.na(as.numeric(inpDF[,"PUC"])),,drop=F] # remove the rows with 'NA' in PUC columns
+		    write.csv (inpDF, outnetFile, quote=FALSE)
+				#print(head(inpDF))
+		    calc_stats(inpDF, PUC_Prop)
+		}
+
+
+
+		if(noPUC){
+		    # do nothing
+	     } else {
+			 	find_PUC_now(outNetwork, networkFile)
+			
+				if( (minPosCoeffCutoff != 0) || (minNegCoeffCutoff != 0) ){
+						find_PUC_now(outNetworkwCoeffCuts, paste0(networkFile, "_PosCoeffCut_", minPosCoeffCutoff, "_NegCoeffCut_", minNegCoeffCutoff, ".csv"))
+				}
+	     }
+		#-------#
 
     print("Done!")
 }

@@ -42,6 +42,12 @@ relativize_multply_million = function(infile){
 	ID = gsub(",", ".", rownames(df), fixed=TRUE)
 	mill_reldf = cbind(ID, mill_reldf)
 	write.csv(mill_reldf, paste(infile, ".rel.million.csv", sep=''), quote=F, row.names=F)
+  
+  # mainly for BRB
+  mill_reldf_plus1 = (reldf * pow(10, 6)) + 1
+  print(head(mill_reldf_plus1))
+  mill_reldf_plus1 = cbind(ID, mill_reldf_plus1)
+  write.csv(mill_reldf_plus1, paste(infile, ".rel.million_plus1.csv", sep=''), quote=F, row.names=F)
 }
 
 

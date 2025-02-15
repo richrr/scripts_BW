@@ -13,7 +13,7 @@ checkInstallAndLoadRlibs = function(lib, pathRlibs){
 	require(lib, , lib.loc = pathRlibs, character.only = TRUE)
 }
 
-libraries <- c("argparser", "stringr")
+libraries <- c("argparser", "stringr", "doParallel")
 uname = Sys.getenv(c("USER"))
 pathRlibs = paste0("/data/",uname, "/R_LIBS")
 print(pathRlibs)
@@ -61,6 +61,16 @@ p <- add_argument(p, "--numbDataFromFCfile", help="use fold change file to figur
 						# ue this argument in very very rare cases, where the number of datasets for the corr and comparisons are different.
 						# e.g. the corr is calculated by pooling 2 expts of say 5 samples into 1 dataset of 10 samples, but the comp file is for 2 datasets (expts)
 
+# jan 14 2023:
+p <- add_argument(p, "--minPosCoeff", help="min Pos Corr Coeff. keep coeff >= minPosCoeff", default=0, type="numeric") # 
+p <- add_argument(p, "--minNegCoeff", help="absolute value for min Neg Corr Coeff. give 0.4, not -0.4 since it may throw error. it will internally convert 0.4 to -0.4
+											will keep abs(coeff) >= abs(minNegCoeff), so for minNegCoeff of -0.4 (given as minNegCoeff 0.4 ) you want to keep -0.5, but not -0.3", default=0, type="numeric") # 
+
+# dec 8 2023: # parallelization of this script needs to be tested 
+p <- add_argument(p, "--multicore", help="run merging in multicore/multiprocessors", flag=TRUE)
+p <- add_argument(p, "--cores", help="use these many cores", default=8, type="numeric") # do not use more than 8. overhead of parallelization gives little speed up above 8 cores.
+
+
 
 argv <- parse_args(p)
 #print (p)
@@ -73,6 +83,7 @@ if(length(argv$file) < 1)
 }
 
 outputFile = argv$output
+
 
 individualPvalueCutoff = argv$indivPvalCutoff
 combinedPvalueCutoff = argv$combPvalCutoff
@@ -92,6 +103,22 @@ if(argv$foldchMean){foldchVar = "FoldChange"}
 if(argv$foldchGeoMean){foldchVar = "FolChGeoMean"}
 outputFile = paste(outputFile , foldchVar, '_', sep='')
 
+minPosCoeffCutoff = argv$minPosCoeff
+minNegCoeffCutoff = -1*argv$minNegCoeff
+
+
+
+# allows multiple cores if the multi core flag is true
+allowed_cores = 1
+if(argv$multicore){
+    allowed_cores = argv$cores
+}
+
+cl <<- makeCluster(allowed_cores, type="FORK")
+#registerDoParallel(cl)  # this function is used to register the parallel backend with the foreach package. not needed if not using foreach
+cl
+
+
 
 noPUC = argv$noPUC
 analysisfc = argv$analysisfc
@@ -110,6 +137,8 @@ networkFile = paste(c(outputFile, search_group_santized, "indiv-pval", individua
 #------------------------------------------------------------------------------------------------
 remove_redundant_columns = function(this_df, total_numb_input_files){
          l_identical_inp = as.character(this_df[, 1])
+				 #print(l_identical_inp)
+				 #print(dim(l_identical_inp))
 
 
          # if there are more than 1 datasets
@@ -118,8 +147,28 @@ remove_redundant_columns = function(this_df, total_numb_input_files){
              for(z in 2:total_numb_input_files){
                     l_identical_inp = cbind(l_identical_inp, as.character(this_df[,z]))
              }
-
-             if(all(apply(l_identical_inp, 2, identical, l_identical_inp[, 1]))){
+						 #print(l_identical_inp)
+						 #print(dim(l_identical_inp))
+						 #print(colnames(l_identical_inp))
+						 #print(length(l_identical_inp))
+						 #print(l_identical_inp[, 1])
+						 #print("--------")
+						 #print(l_identical_inp[, 2])
+						 #print("````````")
+						 
+						 if(nrow(l_identical_inp) == 1){
+						 			print("Different type of checking.")
+									#print(as.character(l_identical_inp))
+									if(length(unique(as.character(l_identical_inp))) == 1){
+											print("All are equal")
+											rownames(this_df) <- this_df[, 1]                           ## set column 1 as rownames
+											this_df <- this_df[, -c(1:total_numb_input_files), drop=F]
+									} else {
+		                     print(l_identical_inp)
+		                     print("All are NOT equal")
+		                     quit()
+		              }
+						 } else if(all(apply(l_identical_inp, 2, identical, l_identical_inp[, 1]))){
                     print("All are equal")
                     rownames(this_df) <- this_df[, 1]                           ## set column 1 as rownames
                     this_df <- this_df[, -c(1:total_numb_input_files)]          ## remove the first "total numb of input files" columns
@@ -190,30 +239,46 @@ calc_PUC_at_thresholds = function(PUCoutfile, df, str='all'){
    # keep consistent pairs only
    data = read.csv( argv$file, header=TRUE, check.names=FALSE)
    subdata = data[data[,1] %in% consist_elems,]
+	 #print(subdata)
+	 #print(dim(subdata))
    total_numb_input_files = length(grep("pairName", colnames(subdata)))
    subdata = remove_redundant_columns(subdata, total_numb_input_files)
    #print("Removed redundant id cols from corr file")
+	 #print(subdata)
+	 #print(dim(subdata))
 
    outForPUC = subdata
-
    CorrAnalysColnames = colnames(outForPUC)
    # only keep the requested analysis number
    if(analysiscorr != "ALL"){
        CorrAnalysColnames = CorrAnalysColnames[grep(analysiscorr,CorrAnalysColnames)]
    }
-   print(CorrAnalysColnames)
+   #print(CorrAnalysColnames)
    outForPUC = outForPUC[,CorrAnalysColnames]
    #print(head(outForPUC))
+	 #print(dim(outForPUC))
 
    # calculate combined Pvalue for interest group
    PvalueColnames = colnames(outForPUC)[grep("pvalue",colnames(outForPUC))]
    PvalueColnames = PvalueColnames[grep(search_group,PvalueColnames)]
    #print(PvalueColnames)
    total_numb_input_files = length(PvalueColnames)
-   interestedPvalueData = outForPUC[,PvalueColnames]
+   interestedPvalueData = outForPUC[,PvalueColnames, drop=F]
+	 #print(interestedPvalueData)
+	 #print(dim(interestedPvalueData))
    interestedPvalueData = as.matrix(interestedPvalueData)
-   interestedPvalueData = apply(interestedPvalueData,2,function(x){as.numeric(as.vector(x))})
-   combinedPvalue = apply(interestedPvalueData,1
+	 
+	 if(nrow(interestedPvalueData) == 1){
+	 			interestedPvalueData = data.frame(apply(interestedPvalueData[ , ,drop=F],2,function(x){as.numeric(as.vector(x))}, simplify = F), check.names = F)
+	 } else {
+	 			interestedPvalueData = apply(interestedPvalueData,2,function(x){as.numeric(as.vector(x))})
+	 }
+	 #print(interestedPvalueData)
+	 #print(dim(interestedPvalueData))
+   
+	 combinedPvalue = ""
+ 	 if(argv$multicore){ 
+			combinedPvalue = parApply(cl, interestedPvalueData,1
 							,function(pvalues){
 										pvalues = pvalues[!is.na(pvalues)]
 										statistics = -2*log(prod(pvalues))
@@ -221,7 +286,18 @@ calc_PUC_at_thresholds = function(PUCoutfile, df, str='all'){
 										combined = 1-pchisq(statistics,degreeOfFreedom)
 									}
 							)
-   outForPUC = cbind(outForPUC,combinedPvalue)
+	 } else{
+			combinedPvalue = apply(interestedPvalueData,1
+							,function(pvalues){
+										pvalues = pvalues[!is.na(pvalues)]
+										statistics = -2*log(prod(pvalues))
+										degreeOfFreedom = 2*length(pvalues)
+										combined = 1-pchisq(statistics,degreeOfFreedom)
+									}
+							)
+	 } 	 	 
+	 
+	 outForPUC = cbind(outForPUC,combinedPvalue)
 
    # calculate median coefficient for interest
    CoefficientColnames = colnames(outForPUC)[grep("Coefficient",colnames(outForPUC))]
@@ -229,9 +305,24 @@ calc_PUC_at_thresholds = function(PUCoutfile, df, str='all'){
    #print(CoefficientColnames)
    interestedCoefficientData = outForPUC[,CoefficientColnames]
    interestedCoefficientData = as.matrix(interestedCoefficientData)
-   interestedCoefficientData = apply(interestedCoefficientData,2,function(x){as.numeric(as.vector(x))})
-   combinedCoefficient = apply(interestedCoefficientData,1, function(x){round(median(x, na.rm = TRUE), 3)})
-   outForPUC = cbind(outForPUC,combinedCoefficient)
+	 
+	 if(nrow(interestedCoefficientData) == 1){
+				interestedCoefficientData = data.frame(apply(interestedCoefficientData[ , ,drop=F],2,function(x){as.numeric(as.vector(x))}, simplify = F), check.names = F)
+	 } else {
+				interestedCoefficientData = apply(interestedCoefficientData,2,function(x){as.numeric(as.vector(x))})
+	 }
+
+   
+   
+	 # take median
+		combinedCoefficient = ''
+		if(argv$multicore){ 
+			 combinedCoefficient = parApply(cl, interestedCoefficientData,1, function(x){round(median(x, na.rm = TRUE), 3)})
+		} else{
+			 combinedCoefficient = apply(interestedCoefficientData,1, function(x){round(median(x, na.rm = TRUE), 3)})
+		}   
+	 
+	 outForPUC = cbind(outForPUC,combinedCoefficient)
 
    result = outForPUC
    #calculate FDR for combined pvalue
@@ -267,9 +358,19 @@ calc_PUC_at_thresholds = function(PUCoutfile, df, str='all'){
    interestedFoldChangeData = FoldChangeMetabolic[,FoldChangeColnames]
    interestedFoldChangeData = as.matrix(interestedFoldChangeData)
    interestedFoldChangeData = apply(interestedFoldChangeData,2,function(x){as.numeric(as.vector(x))})
-   combinedFoldChange = apply(interestedFoldChangeData,1, function(x){round(median(x, na.rm = TRUE), 3)})
-   FoldChangeMetabolic$geneName = rownames(FoldChangeMetabolic)
+   
+	 combinedFoldChange = ''
+	 if(argv$multicore){
+			combinedFoldChange = parApply(cl, interestedFoldChangeData,1, function(x){round(median(x, na.rm = TRUE), 3)})
+	 } else{
+			combinedFoldChange = apply(interestedFoldChangeData,1, function(x){round(median(x, na.rm = TRUE), 3)})
+	 }
+
+	 
+	 FoldChangeMetabolic$geneName = rownames(FoldChangeMetabolic)
    FoldChangeMetabolic = cbind(FoldChangeMetabolic,combinedFoldChange)
+	 
+	 #print(head(FoldChangeMetabolic))
    }
 
 
@@ -283,9 +384,17 @@ pow <- function(x=10, y=6) {
 unlog <- function(FoldChangeData, base){
 	if(logbase != 0){
 	    if(logbase == 1) {
-	          FoldChangeData = apply(FoldChangeData, 2, function(x) {exp(x)})    # using the base e
+					if(nrow(FoldChangeData) == 1){
+							 FoldChangeData = data.frame(apply(FoldChangeData[ , ,drop=F],2,function(x){exp(x)}, simplify = F), check.names = F)
+					} else {
+			         FoldChangeData = apply(FoldChangeData, 2, function(x) {exp(x)})    # using the base e
+					}
 	    } else {
-	          FoldChangeData = apply(FoldChangeData, 2, function(x) {pow(base, x)})
+					if(nrow(FoldChangeData) == 1){
+							 FoldChangeData = data.frame(apply(FoldChangeData[ , ,drop=F],2,function(x){pow(base, x)}, simplify = F), check.names = F)
+					} else {
+	          	FoldChangeData = apply(FoldChangeData, 2, function(x) {pow(base, x)})
+					}
 	    }
 	}
 	return(FoldChangeData)
@@ -297,6 +406,7 @@ unlog <- function(FoldChangeData, base){
 
    Data = result
    head(result)
+
 #--------------------------------------------------------------------------------
 # calculate PUC
 #--------------------------------------------------------------------------------
@@ -308,9 +418,19 @@ forPUC = function(FoldChangeMetabolic,noPUC){
 	pairs = t(as.data.frame(pair))
 
 	colnames(pairs) = c("partner1","partner2")
-	Data = apply(Data, 2, function(x) as.numeric(as.character(x))) # convert the chars to numeric
+	
+	if(nrow(Data) == 1){
+			 Data = data.frame(apply(Data[ , ,drop=F],2,function(x){as.numeric(as.vector(x))}, simplify = F), check.names = F)
+	} else {
+			 Data = apply(Data, 2, function(x) as.numeric(as.character(x))) # convert the chars to numeric
+	}
+
+	
+	
 	rownames(pairs) = row_names_Data # remove this if you do not want row names
         outForPUC = cbind(pairs,Data)
+				
+				#print(outForPUC)
 
         grep_cols_c = grep("pvalue", colnames(outForPUC), value=TRUE, fixed=TRUE) #ignore.case = TRUE ,
         grep_cols_c = append(grep_cols_c, grep("combined" , colnames(outForPUC), value=TRUE, fixed=TRUE) )
@@ -322,32 +442,62 @@ forPUC = function(FoldChangeMetabolic,noPUC){
         if(noPUC){
            # no need to loop up the fold change
         } else {
+				
+				
+				
+				
         # attach the foldChange information for each partner
         FoldChangeCol = grep("combined" , colnames(FoldChangeMetabolic), value=TRUE, fixed=TRUE)
+				
+				#print(FoldChangeCol)
+				
 	FoldMetab1_InPair = FoldChangeMetabolic[as.vector(outForPUC[,"partner1"]), c("geneName", FoldChangeCol)]
 	colnames(FoldMetab1_InPair) = c("partner1InFold","partner1_FoldChange")
+	#print(head(FoldMetab1_InPair))
+	
 	FoldMetab2_InPair = FoldChangeMetabolic[as.vector(outForPUC[,"partner2"]),c("geneName", FoldChangeCol)]
 	colnames(FoldMetab2_InPair) = c("partner2InFold","partner2_FoldChange")
+	#print(head(FoldMetab2_InPair))
 
-    FoldMetab1_InPair = cbind(FoldMetab1_InPair[, 1, drop=F], unlog(FoldMetab1_InPair[, 2, drop=F], logbase))
+
+  FoldMetab1_InPair = cbind(FoldMetab1_InPair[, 1, drop=F], unlog(FoldMetab1_InPair[, 2, drop=F], logbase))
 	FoldMetab2_InPair = cbind(FoldMetab2_InPair[, 1, drop=F], unlog(FoldMetab2_InPair[, 2, drop=F], logbase))
 	#print(head(FoldMetab1_InPair))
 	#print(head(FoldMetab2_InPair))
 
 	outForPUC = cbind(outForPUC,FoldMetab1_InPair,FoldMetab2_InPair)
+	
+	print(head(outForPUC))
+	
 	}
+
+
+
+
 
         # calculate correlation Direction For combined correlation coefficient of interest
         # at this point we only have the consistent pairs left, so the value of combined corr coeff is ok to use
         interestedCoefficientColnames = grep("Coefficient",colnames(outForPUC), value=TRUE, fixed=TRUE)
-	print(interestedCoefficientColnames)
+	#print(interestedCoefficientColnames)
 	interestedCorrelationData = outForPUC[,interestedCoefficientColnames, drop=FALSE]
-	interestedCorrelationData = apply(interestedCorrelationData,2,function(x){as.numeric(as.vector(x))})
+	#print(interestedCorrelationData)
+	
+	
+	if(nrow(interestedCorrelationData) == 1){
+			 interestedCorrelationData = data.frame(apply(interestedCorrelationData[ , ,drop=F],2,function(x){as.numeric(as.vector(x))}, simplify = F), check.names = F)
+			 interestedCorrelationData = as.matrix(interestedCorrelationData)
+	} else {
+			 interestedCorrelationData = apply(interestedCorrelationData,2,function(x){as.numeric(as.vector(x))})
+	}
+
+	#print(head(interestedCorrelationData))
+	#print(class(interestedCorrelationData))
 	signOfInterestedCorrelationData = interestedCorrelationData/abs(interestedCorrelationData)
 	rownames(signOfInterestedCorrelationData) = c()
 	colnames(signOfInterestedCorrelationData) = paste(colnames(interestedCorrelationData),"correlationDirection",sep=".")
 	matchedExpressionDirection = signOfInterestedCorrelationData
-
+	#print(head(matchedExpressionDirection))
+	#print(class(matchedExpressionDirection))
 
         if(noPUC){
            # no need to loop up the fold change direction
@@ -355,32 +505,46 @@ forPUC = function(FoldChangeMetabolic,noPUC){
         } else {
 	# calculate fold change direction for each partner
 	FoldChangeColnames = colnames(outForPUC)[grep("FoldChange",colnames(outForPUC))] # since this is using the combined fold change calculated above, you do not need the foldchVar variable
-	FoldChangeData = outForPUC[,FoldChangeColnames]
+	#print(FoldChangeColnames)
+	FoldChangeData = outForPUC[,FoldChangeColnames, drop=F]
 
 
 	#print(head(FoldChangeData))
 
-	FoldChangeDirection = NA
 
-	#if (foldchthresh==0){
-	#    FoldChangeDirection <- as.matrix(FoldChangeData)
-	#    FoldChangeDirection[FoldChangeDirection<0] <- -1
-	#    FoldChangeDirection[FoldChangeDirection>=0] <- 1
-	#    FoldChangeDirection = as.data.frame(FoldChangeDirection)
-	#    #print(head(FoldChangeDirection))
-	#} else { # for unlog data
-	    FoldChangeDirection = (FoldChangeData-1)/abs(FoldChangeData-1)
-	#}
+
+
+	FoldChangeDirection = NA
+	FoldChangeDirection = (FoldChangeData-1)/abs(FoldChangeData-1)
 	names(FoldChangeDirection) = c()
 	colnames(FoldChangeDirection) = paste(colnames(FoldChangeData),"FoldChangeDirection",sep=".")
+	#print(FoldChangeDirection)
+	
+	
 
 	# calculate if fold change direction are the same for the two partners
-	IfFoldChangeDirectionMatch = apply(FoldChangeDirection,1,prod)
+	IfFoldChangeDirectionMatch = ''
+	if(argv$multicore && nrow(FoldChangeDirection) > 1){
+		 IfFoldChangeDirectionMatch = parApply(cl,FoldChangeDirection,1,prod)
+	} else{
+			if(nrow(FoldChangeDirection) == 1){
+			 		IfFoldChangeDirectionMatch = apply(FoldChangeDirection[ , ,drop=F],1,prod)
+			} else {
+		 			IfFoldChangeDirectionMatch = apply(FoldChangeDirection,1,prod)
+		 	}
+	}
+
+	
 	names(IfFoldChangeDirectionMatch) = c()
 	colnames(matchedExpressionDirection) = c()
 
+	#print(head(IfFoldChangeDirectionMatch))
+	#print(head(matchedExpressionDirection))
+	
 	# use "matchedExpressionDirection" and "IfFoldChangeDirectionMatch" to calc PUC, i.e. if these two are the same PUC=1 (good)
 	PUC = IfFoldChangeDirectionMatch * matchedExpressionDirection
+	#print(head(PUC))
+	
 	outForPUC = cbind(outForPUC,signOfInterestedCorrelationData,FoldChangeDirection,IfFoldChangeDirectionMatch,PUC)
         }
 
@@ -440,17 +604,21 @@ forPUC = function(FoldChangeMetabolic,noPUC){
 
     # sort as per combined fdr
     sorted_result = result[order(result$"combinedFDR"), ]
-    plt = calc_PUC_at_thresholds(PUCoutfile, sorted_result) # walk along fdr and calc puc at diff fdr
-    write.csv(plt, paste(PUCoutfile, "all-edges.csv", sep='.'), row.names=FALSE)
-
+		
+		if(nrow(sorted_result) > 1){
+		    plt = calc_PUC_at_thresholds(PUCoutfile, sorted_result) # walk along fdr and calc puc at diff fdr
+		    write.csv(plt, paste(PUCoutfile, "all-edges.csv", sep='.'), row.names=FALSE)
+		}
+		
     # if there are only pos or neg correlations, use the if condition to avoid error
-    if(nrow(sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == 1),])>0){
-    pos_plt = calc_PUC_at_thresholds(PUCoutfile, sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == 1),], "pos") # walk along fdr and calc puc at diff fdr
-    write.csv(pos_plt, paste(PUCoutfile, "pos-edges.csv", sep='.'), row.names=FALSE)
+    if(nrow(sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == 1),])>1){
+		    pos_plt = calc_PUC_at_thresholds(PUCoutfile, sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == 1),], "pos") # walk along fdr and calc puc at diff fdr
+		    write.csv(pos_plt, paste(PUCoutfile, "pos-edges.csv", sep='.'), row.names=FALSE)
     }
-    if(nrow(sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == -1),])>0){
-    neg_plt = calc_PUC_at_thresholds(PUCoutfile, sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == -1),], "neg") # walk along fdr and calc puc at diff fdr
-    write.csv(neg_plt, paste(PUCoutfile, "neg-edges.csv", sep='.'), row.names=FALSE)
+		
+    if(nrow(sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == -1),])>1){
+		    neg_plt = calc_PUC_at_thresholds(PUCoutfile, sorted_result[which(sorted_result$combinedCoefficient.correlationDirection == -1),], "neg") # walk along fdr and calc puc at diff fdr
+		    write.csv(neg_plt, paste(PUCoutfile, "neg-edges.csv", sep='.'), row.names=FALSE)
     }
     data = sorted_result
     }
@@ -547,6 +715,8 @@ calc_stats = function(inNet, PUC_Prop, correlThreshold=0){
         write.csv(paste(c("Ratio of edges to nodes: ", nrow(inNet)/length(nodes)), collapse='') , file=out, row.names=FALSE)
         write.csv(paste(c("Number of unique edges (without self loops): ", nrow(edgesDistinctNodes)), collapse='') , file=out, row.names=FALSE)
         write.csv(paste(c("PUC with ip,fisher,fdr cuts: ", PUC_Prop), collapse='') , file=out, row.names=FALSE)
+				
+				write("------------------------------", out)
 
         close(out)
 
@@ -609,7 +779,14 @@ generateNetwork = function(){
 	
 
 	# calculate the largest pvalue among all datasets for each gene, this smallest pvalue must be smaller than threshold
-	passIndevidualPvalue = apply(pvalueData,1,max,na.rm=T)<individualPvalueCutoff  # june 21 2020
+	passIndevidualPvalue = ''
+	if(argv$multicore){
+		 passIndevidualPvalue = parApply(cl, pvalueData,1,max,na.rm=T)<individualPvalueCutoff
+	} else{
+		 passIndevidualPvalue = apply(pvalueData,1,max,na.rm=T)<individualPvalueCutoff  # june 21 2020
+	}
+
+
 	#print(head(passIndevidualPvalue))
 	outNetwork = out[passIndevidualPvalue, , drop=FALSE]
 	#print(head(outNetwork))
@@ -621,27 +798,59 @@ generateNetwork = function(){
 	write.csv(outNetwork,paste0(networkFile,"-prePUCcut.csv"), quote=FALSE)
 	#print(head(outNetwork))
 
+	outNetworkwCoeffCuts = NULL
+	if( (minPosCoeffCutoff != 0) || (minNegCoeffCutoff != 0) ){
+
+			outNetworkwCoeffCuts1 = outNetwork[which( (abs(as.numeric(outNetwork[,"combinedCoefficient"])) >= abs(minNegCoeffCutoff)) &  (as.numeric(outNetwork[,"combinedCoefficient"]) < 0) ), ] 
+			outNetworkwCoeffCuts2 = outNetwork[which(as.numeric(outNetwork[,"combinedCoefficient"]) >= minPosCoeffCutoff), ]
+
+			outNetworkwCoeffCuts = rbind(outNetworkwCoeffCuts1, outNetworkwCoeffCuts2)
+			write.csv(outNetworkwCoeffCuts, paste0(networkFile, "_PosCoeffCut_", minPosCoeffCutoff, "_NegCoeffCut_", minNegCoeffCutoff, "-prePUCcut.csv"), quote=FALSE)
+
+	}
+
+
+	find_PUC_now = function(inpDF, outnetFile){
+	    DEN = length(inpDF[,"PUC"])
+	    NUM = DEN - length(inpDF[as.numeric(inpDF[,"PUC"])==1, "PUC"])
+	    PUC_Prop = as.numeric(NUM*100/DEN)
+	    print("PUC after the ip, fisher, fd cuts:")
+	    print(PUC_Prop)
+
+	     # keep PUC expected
+	    inpDF = inpDF[as.numeric(inpDF[,"PUC"])==1 ,,drop=F]
+	    inpDF = inpDF[!is.na(as.numeric(inpDF[,"PUC"])),,drop=F] # remove the rows with 'NA' in PUC columns
+	    write.csv (inpDF, outnetFile, quote=FALSE)
+			#print(head(inpDF))
+	    calc_stats(inpDF, PUC_Prop)
+	}
+
+
+
 	 if(noPUC){
 	    # do nothing
      } else {
-		# find puc after pval, cp, fdr cuts
-	 	DEN = length(outNetwork[,"PUC"])
-		NUM = DEN - length(outNetwork[as.numeric(outNetwork[,"PUC"])==1, "PUC"])
-		PUC_Prop = as.numeric(NUM*100/DEN)
-		print("PUC after the ip, fisher, fd cuts:")
-		print(PUC_Prop)
-
-	    # keep PUC expected
-	    outNetwork = outNetwork[as.numeric(outNetwork[,"PUC"])==1 ,,drop=F]
-		outNetwork = outNetwork[!is.na(as.numeric(outNetwork[,"PUC"])),,drop=F] # remove the rows with 'NA' in PUC columns
-		write.csv (outNetwork,networkFile, quote=FALSE)
-		calc_stats(outNetwork, PUC_Prop)
+		 	find_PUC_now(outNetwork, networkFile)
+		
+			if( (minPosCoeffCutoff != 0) || (minNegCoeffCutoff != 0) ){
+					find_PUC_now(outNetworkwCoeffCuts, paste0(networkFile, "_PosCoeffCut_", minPosCoeffCutoff, "_NegCoeffCut_", minNegCoeffCutoff, ".csv"))
+			}
      }
-
-	#print(head(outNetwork))
 
     print("Done!")
 }
 
 
     generateNetwork()
+
+
+	#stop cluster
+	stopCluster(cl)
+
+
+
+
+
+
+
+	q()

@@ -20,7 +20,9 @@ library("survminer")
 library("plotly")
 #library("rolr")
 
+library(forcats)
 
+source("/data/rodriguesrr/scripts/R/Evaluate_cutpoints/util-functions-Evaluate_cutpoints.R")
 
 # ------------------------------------------------------------------------------
 
@@ -30,53 +32,59 @@ biomarkerCounts <- function(biomarker) {
   result = as.data.frame(table(biomarker))
   Percent = (result$Freq*100)/length(biomarker)
   length.results = cbind(result, Percent)
+  write.csv(length.results, file="Input-stats.csv", row.names=F, quote=F)
   return(length.results)
 }
 
 
+
 # Get cox model with coefficients and result table
 
-resultTableSurvival <- function(biomarker, survival, event, df, x) {
+resultTableSurvival <- function(biomarker, survival, event, df, x, biomarkername) {
   
-  length.results <-  biomarkerCounts(biomarker)
-  print(length.results)
+  input.table <-  biomarkerCounts(biomarker)
+  print(input.table)
   
-  length.results <-  lapply(length.results, function(x) as.character(x))
-  #print(length.results)
   
-  length.results <-  do.call(c,length.results)
-  #print(length.results)
 
+  # flipping the level order in coxph to match the order of levels and results with the KM plot
+  #------------------------------------
+  # by default:
+      ## the levels are based on alphabetical sorting
+      ## the first level is treated as "reference".
+  # reorder the levels:
+      ##  so the the last item becomes reference
+  # df$x = factor(df$x)
+  # original_levels_in_categ = levels(df$x)
+  # number_of_levels_in_categ = length(levels(df$x))
+  # last_categ_after_sort_is_ref = levels(df$x)[number_of_levels_in_categ]
+  # df$x = relevel(df$x, ref = last_categ_after_sort_is_ref)
+  # new_levels_in_categ = levels(df$x)
+  #------------------------------------
+  df$x = forcats::fct_rev(df$x) # reverses the order of levels and basically ends up doing the same as above
+  
   res.cox <- do.call(
     coxph,
     list(formula = Surv(survival, event) ~ x, data = df)
   )
   
+
+  # generate the stats and plots to check for coxph assumptions (method 1)
+  # the solid line is a smoothing spline fit to the plot, with the dashed lines representing a +/- 2-standard-error band around the fit.
+  # Note that, systematic departures from a horizontal line are indicative of non-proportional hazards, since proportional hazards assumes that estimates β1,β2,β3
+  # do not vary much over time. 
+  # From the graphical inspection, if there is no pattern with time, the assumption of proportional hazards appears to be supported.
+  plot_scaled_Schoenfeld_residuals_with_time(res.cox, biomarkername)
+
   model <- summary( res.cox )
   #print(summary( res.cox ))
-  coef <- model$coefficients
-  HR <- signif( coef[ 2 ], digits = 3 )
-  names(HR) = "HR"
-  q <- 1-(1-95/100)/2
-  z <- qnorm( q )
-  HR.lower <- signif( exp( coef[1] - z * coef[3] ), digits = 3 )
-  HR.upper <- signif( exp( coef[1] + z * coef[3] ), digits = 3 )
-  CI <- paste0("(", HR.lower, " - ", HR.upper, ")" )
-  names(CI) = "CI"
-  p <- signif( model$sctest[ "pvalue" ], digits = 3 )
   
-  print(paste0(length.results[1], ": n=", length.results[3]))
-  print(paste0(length.results[2], ": n=", length.results[4]))
-  print(paste0(HR, " ", CI, ", P=", p))
-  
-  result.table <- c(length.results, HR, CI, p)
-  result.table <- data.frame(result.table)
-  Estimate = rownames(result.table)
-  result.table = cbind(Estimate, result.table)
-  colnames(result.table) <- c("Estimate", "Result")
-  #print(result.table)
-  return(result.table)
+  out_string =  format_results(model)
+  return(out_string)
+ 
+
 }
+
 
 
 CoxAndKaplanMeyerMethod <- function(df, time, event, biomarker) {
@@ -90,12 +98,7 @@ CoxAndKaplanMeyerMethod <- function(df, time, event, biomarker) {
   x <- vector.biomarker
   category.df <- data.frame( df, category, x )
 
-  result.table <- resultTableSurvival(vector.biomarker, vector.survival, vector.event, category.df, x)
-  write.csv(result.table, file="Results.csv", row.names=F, quote=F)
-  
-  restext = result.table[c("HR", "pvalue"), ]
-  restext$Estimate[2] = 'p'
-  restext = paste(restext$Estimate, restext$Result , sep=' = ', collapse='\n')
+  restext <- resultTableSurvival(vector.biomarker, vector.survival, vector.event, category.df, x, biomarker)
   print(restext)
   
   fit <- do.call(
@@ -103,6 +106,12 @@ CoxAndKaplanMeyerMethod <- function(df, time, event, biomarker) {
     list( formula = Surv( vector.survival, vector.event ) ~ category, data = category.df )
   )
   
+  # plots to check for coxph assumptions (method 2)
+  # parallel lines means proportional hazards assumption is met.
+  # intersecting lines means variable violates proportional hazards assumption.
+  # log(-log(S)) method, using Kaplan-Meier estimator
+  plot_log_neg_log_S_vs_log_time_using_Kaplan_Meier_estimator(category.df, category, biomarker)
+
   # http://www.sthda.com/english/wiki/survminer-r-package-survival-data-analysis-and-visualization
   ggsurvfit <- ggsurvplot(fit, pval = F, risk.table = TRUE, risk.table.col = "strata", title = biomarker, ggtheme=theme_survminer(base_family = "Helvetica")) 
   # center align labels
@@ -111,13 +120,13 @@ CoxAndKaplanMeyerMethod <- function(df, time, event, biomarker) {
   # add annotation in plot
   ggsurvfit$plot <- ggsurvfit$plot+ 
               ggplot2::annotate("text", x = Inf, y = Inf, vjust = 1, hjust = 1,
-                                label = restext, size = 4) # x = 0, y = 0.2
+                                label = restext, size = 2) # x = 0, y = 0.2
 
   #ggsave(paste(biomarker, "KaplanMeierPlot.png"), plot = print(ggsurvfit), dpi=600)
   #ggsave(paste(biomarker, "KaplanMeierPlot.eps"), plot = print(ggsurvfit), dpi=600)
   #ggsave(paste(biomarker, "KaplanMeierPlot_.pdf"), plot = print(ggsurvfit), dpi=600, onefile=F) # else produces an additional first blank page
   
-  pdf(paste(biomarker, "KaplanMeierPlot_.pdf"), onefile=F)
+  pdf(paste0(biomarker, "_KaplanMeierPlot.pdf"), onefile=F)
   plot = print(ggsurvfit)
   dev.off()
 }

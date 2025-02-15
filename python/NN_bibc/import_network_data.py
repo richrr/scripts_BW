@@ -48,10 +48,14 @@ parser.add_argument("--target", default = 'partner2', help = 'Name of the target
 parser.add_argument("--dev", action = 'store_true', help = 'Do you want to calculate deviation from expected? (Usually do not use this arg. Requires larger input file format)')
 parser.add_argument("--num_groups", help = 'Usually do not use this arg. Number of groups correlations were initially performed in, required if --dev is supplied')
 
+parser.add_argument("--outputfileprefix", help = 'Output filename prefix')
+
 args = parser.parse_args()
 
 net_file = args.input
 net_file_trimmed = net_file[:-4] # trim the ".csv" or ".txt" from the input file string   
+
+outputfilename = args.outputfileprefix if args.outputfileprefix is not None else net_file_trimmed
 
 if args.dev:
     groups = int(args.num_groups)
@@ -134,7 +138,7 @@ for key,value in corr_dict.items():
 
 
 # Save to pickle
-pickle_out = open(net_file_trimmed + ".pickle", "wb")
+pickle_out = open(outputfilename + ".pickle", "wb")
 
 ### If --dev is supplied as an argument, calculate the devation from expected
 if args.dev:    

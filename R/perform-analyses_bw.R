@@ -21,6 +21,7 @@
 # ccr: 90 Million corrs needed 127G Ram and 7 hrs with 64 cores
 
 
+
 ### do not use:
 		### timelag with different input gene lists;
 		### freq calc results with different input gene lists
@@ -44,7 +45,7 @@
 ## may cause g1.t1 with g2.t2 but not g2.t1 with g1.t2,
 ## be careful for time lag with diff gene lists, since the order of input list may matter for which gene in time 1 is correlated against which gene in time 2
 
-#written for R/3.6
+#written for R/3.6 (and also works for R/4.3.0)
 
 
 #=================================================================================
@@ -242,7 +243,7 @@ COLHEADGRPSEP = '_||_'  #__<=-=>__
 dict = hash()
 for(exptCol in mapColumnHeaders){
 	# for unique items in the experiment column
-	for(k in levels(mapFile[, exptCol])){
+	for(k in unique(mapFile[, exptCol])){ # levels for R/3.6.0
 		# extract the rows whose col value in exptCol matches k
 		# assign the sample names (i.e. values in samplIdCol) to key k
 		vals = as.vector(mapFile[which(mapFile[,exptCol]==k), samplIdCol])
@@ -250,7 +251,7 @@ for(exptCol in mapColumnHeaders){
 		dict[expK] = vals
 	}
 }
-#print(dict)
+print(dict)
 
 
 
@@ -462,7 +463,7 @@ if(argv$writeCorrPerAnalysis || LargeNumbCorrsForCalc){
 #==================================================================================================================
 # load expression data
 #==================================================================================================================
-expressionData = read.csv(expressionDataFile,header = TRUE,check.names=FALSE,na.strings=c("","na","NA", "Na", "NaN"))
+expressionData = read.csv(expressionDataFile,header = TRUE,check.names=FALSE,na.strings=c("","na","NA", "Na", "NaN", "#DIV/0!","#VALUE!"))
 expressionData = expressionData[!duplicated(expressionData[,symbleColumnName]),]    #delete duplicated measurements (genes, taxa labels, phenotypic labels, etc.)
 rownames(expressionData) = expressionData[,symbleColumnName]
 
@@ -591,8 +592,26 @@ for(indx in 1:nrow(AnalysToDoList)){
 				#print (categ1)
 				#print (categ2)
 
-				categ1 = paste(ColHead, categ1, sep=COLHEADGRPSEP)
-				categ2 = paste(ColHead, categ2, sep=COLHEADGRPSEP)
+				# for anova
+				if( (grepl(";", categ1))&(grepl(";", categ2)) ) {
+					# convert Name "day3_vs_day6;day3_vs_day10" to
+					# "Name_||_day3_vs_Name_||_day6;Name_||_day3_vs_Name_||_day10"
+					tmp = unlist(strsplit(categ1,";"))
+					tmp=gsub("_vs_", paste0("_vs_",ColHead,COLHEADGRPSEP), tmp)
+					tmp=gsub("^", paste0(ColHead,COLHEADGRPSEP), tmp)
+					categ1=paste(tmp, collapse=";")
+
+
+					# convert Name "day3;day6;day10" to
+					# "Name_||_day3;Name_||_day6;Name_||_day10"		
+					categ2 = paste(ColHead, unlist(strsplit(categ2,";")), sep=COLHEADGRPSEP, collapse=";")			
+
+				} else{
+					categ1 = paste(ColHead, categ1, sep=COLHEADGRPSEP)
+					categ2 = paste(ColHead, categ2, sep=COLHEADGRPSEP)
+				}
+				print (categ1)
+				print (categ2)
 
 				# calculate comparison
         outEachExperiment = calculateComparison(genes, expressionData, categ1, categ2, dict, argv$comparMethod, c[3], indx)

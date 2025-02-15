@@ -24,7 +24,7 @@ if(length(args)>1 && tolower(args[2]) == "storey"){
 
 BIGDF = NULL
 for (lkt in list.dirs(path = args[1], full.names = TRUE, recursive = TRUE)){
-  if(grepl("LKT", lkt)){
+  if(grepl("LKT|__D_0__", lkt)){  # from jams or qiime2
     print(lkt)
     
     cutps = list.files(path = lkt, pattern = "-Results.csv", full.names = T)
@@ -57,9 +57,9 @@ for (lkt in list.dirs(path = args[1], full.names = TRUE, recursive = TRUE)){
       } else{
           lambdaf = seq(min(pv),(max(pv)-0.0000001),0.01)
           # /data/rodriguesrr/FMT_pittsburg/Pittsburg_Cohorts_paper/ev-cutpoints/june-15-2021/houst/lkt-pfs/analysis-results/Tue_Jun_15_2021_07_25_06\ PM/LKT__s__Megasphaera_Unclassified/*csv
-          # # put max value as additional entry to avoid the error  "If length of lambda greater than 1, you need at least 4 values."
+          # # put max value as additional entry/ies to avoid the error  "If length of lambda greater than 1, you need at least 4 values."
           if(length(lambdaf)<4){  
-            lambdaf = c(lambdaf, max(pv)) 
+            lambdaf = c(lambdaf, rep(max(pv), times=4-length(lambdaf)))   #c(lambdaf, max(pv)) 
           }
           Storey.qobj <- qvalue(p = pv, lambda=lambdaf, pi0.meth = "bootstrap")
           FDR <- unlist(Storey.qobj[3])

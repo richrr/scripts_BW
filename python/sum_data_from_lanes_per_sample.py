@@ -1,6 +1,6 @@
 import os
 import sys
-from utils import *
+from utilsPy3 import *
 import operator
 from time import localtime, strftime
 import argparse
@@ -8,6 +8,8 @@ import re
 import sh
 import pandas as pd
 
+
+# edited for python 3.10 in Feb 2024
 
 # cd /nfs3/PHARM/Morgun_Lab/richrr/Type2_Diabetes/RNA-Seq/analysis/summarize_per_sample
 # usage:  python ~/Morgun_Lab/richrr/scripts/python/sum_data_from_lanes_per_sample.py -i data_per_lane.txt -b rnaseqil
@@ -81,7 +83,7 @@ def main(args):
 
     # read the full file as a data frame
     df = pd.read_table(infile, index_col = args.rowid, skiprows=skiprows, sep=delim)
-    print df.head()
+    print(df.head())
 
     ### do not use this code below. use skiprows during read_table
     # after reading the file, the header is not counted as a row. start skipping from row 1 (index 0)
@@ -98,16 +100,16 @@ def main(args):
     # https://stackoverflow.com/questions/25748683/pandas-sum-dataframe-rows-for-given-columns
     for key in headers:
         value = sample_lanes_dict[key]
-        print key, value
+        print(key, value)
         df_[key] = df[value].sum(axis=1)
-    print df_.head()
+    print(df_.head())
 
     df_.to_csv(outfile, sep=delim, index_label=header_line.split(delim)[0])
 
     # print the column names
-    print "Check the order of samples" 
-    print '\n'.join(list(df_))
-    print "Done"
+    print("Check the order of samples") 
+    print('\n'.join(list(df_)))
+    print("Done")
     #sys.exit()
 
     
@@ -117,4 +119,3 @@ if __name__=='__main__':
     cmd = 'echo ' + datetime 
     os.system(cmd)
     main(sys.argv)
-

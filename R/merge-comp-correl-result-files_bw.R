@@ -457,7 +457,21 @@ ret_results_meta_FixedRandom_Effects = function(datasetDF){
 	# https://www.rdocumentation.org/packages/meta/versions/4.9-9/topics/metacont
 	# Internally, both fixed effect and random effects models are calculated regardless of values choosen for arguments comb.fixed and comb.random
 
-	m.raw <- metacont(Ne, Me, Se, Nc, Mc, Sc, data=datasetDF, studlab=paste(dataset), comb.fixed = TRUE, comb.random = TRUE, prediction=TRUE, sm="SMD")
+	# default   #### uncomment when running default     ---------(1)
+	#m.raw <- metacont(Ne, Me, Se, Nc, Mc, Sc, data=datasetDF, studlab=paste(dataset), comb.fixed = TRUE, comb.random = TRUE, prediction=TRUE, sm="SMD")
+	
+	
+	# try this if you get 
+	#Error in (function (yi, vi, sei, weights, ai, bi, ci, di, n1i, n2i, x1i,  : 
+  #Fisher scoring algorithm did not converge. See 'help(rma)' for possible remedies.
+	# https://www.researchgate.net/post/Cannot_run_summary_measure_with_standardized_mean_differences_SMD_mode_on_R
+	#### comment when running default     ---------(2)
+	m.raw <- metacont(Ne, Me, Se, Nc, Mc, Sc, data=datasetDF, studlab=paste(dataset), comb.fixed = TRUE, comb.random = TRUE, prediction=TRUE, method.tau = "DL", sm="SMD")
+	
+	
+
+	#print(m.raw)
+	
 	
 	# zval, pval: z-value and p-value for test of treatment effect for individual studies.
 	# w.fixed, w.random: Weight of individual studies (in fixed and random effects model).
@@ -492,7 +506,9 @@ ret_results_meta_FixedRandom_Effects = function(datasetDF){
 	#							"TE.random", "lower.random", "upper.random", "zval.random", "pval.random")
 	#print(tmp_res)
 	
-	
+
+#### uncomment when running default     ---------(1)
+if(FALSE){
 	vals = c(unlist(m.raw["TE"], use.names=FALSE), 
 					unlist(m.raw["lower"], use.names=FALSE), 
 					unlist(m.raw["upper"], use.names=FALSE), 
@@ -517,33 +533,36 @@ ret_results_meta_FixedRandom_Effects = function(datasetDF){
 						unlist(m.raw["upper.random"], use.names =FALSE), 
 						unlist(m.raw["zval.random"], use.names =FALSE), 
 						unlist(m.raw["pval.random"], use.names =FALSE))
+}
+
+
+	#### comment when running default     ---------(2)
+	vals = c(unlist(m.raw["TE.fixed"], use.names =FALSE), 
+						unlist(m.raw["lower.fixed"], use.names =FALSE), 
+						unlist(m.raw["upper.fixed"], use.names =FALSE), 
+						unlist(m.raw["zval.fixed"], use.names =FALSE), 
+						unlist(m.raw["pval.fixed"], use.names =FALSE),
+						
+						unlist(m.raw["tau2"], use.names =FALSE), 
+						unlist(m.raw["tau"], use.names =FALSE), 
+						unlist(m.raw["I2"], use.names =FALSE)*100, 
+						unlist(m.raw["H"], use.names =FALSE), 
+						unlist(m.raw["Q"], use.names =FALSE),
+						unlist(m.raw["df.Q"], use.names =FALSE), 
+						unlist(m.raw["pval.Q"], use.names =FALSE), 
+						
+					  unlist(m.raw["TE.random"], use.names =FALSE), 
+						unlist(m.raw["lower.random"], use.names =FALSE), 
+						unlist(m.raw["upper.random"], use.names =FALSE), 
+						unlist(m.raw["zval.random"], use.names =FALSE), 
+						unlist(m.raw["pval.random"], use.names =FALSE))
+
+
+
+
+
 	vals = cbind(vals)
 						
-	#print(vals)
-
-	#print(m.raw)	
-	#print(names(m.raw))
-	
-	#print(m.raw["TE"])
-	#print(m.raw["lower"])
-	#print(m.raw["upper"])
-
-	#print(weights(m.raw))
-	
-	#print(m.raw["TE.fixed"])
-	#print(m.raw["lower.fixed"])
-	#print(m.raw["upper.fixed"])
-
-
-	#print(m.raw["zval.fixed"])
-	#print(m.raw["pval.fixed"])
-	#print(m.raw["zval.random"])
-	#print(m.raw["pval.random"])
-
-
-	#print(m.raw["TE.random"])
-	#print(m.raw["lower.random"])
-	#print(m.raw["upper.random"])
 	
 	return(vals)
 }
@@ -599,12 +618,23 @@ if(argv$metaFixedRandomEffects)
 
 			 out = sapply(rownames(subset_df), calc_meta_FixedRandom_Effects, subset_df, total_numb_input_files, Dataset)
 			 out = t(out)
+			 
+			 #### uncomment when running default     ---------(1)
+			 if(FALSE){
 			 tmp_res = c(paste0("TE_", Dataset), paste0("lower_", Dataset), paste0("upper_", Dataset), 
 			 							paste0("w.absolute.fixed_", Dataset), paste0("w.percentage.fixed_", Dataset),
 			 							"TE.fixed", "lower.fixed", "upper.fixed", "zval.fixed", "pval.fixed",
 			 							"Tau2", "Tau", "I2%", "H", "Q", "df.Q", "pval.Q", 
 			 							paste0("w.absolute.random_", Dataset), paste0("w.percentage.random_", Dataset),
 			 							"TE.random", "lower.random", "upper.random", "zval.random", "pval.random")
+				}
+
+			#### comment when running default     ---------(2)
+			tmp_res = c("TE.fixed", "lower.fixed", "upper.fixed", "zval.fixed", "pval.fixed",
+			 							"Tau2", "Tau", "I2%", "H", "Q", "df.Q", "pval.Q", 
+			 							"TE.random", "lower.random", "upper.random", "zval.random", "pval.random")
+
+
 			 colnames(out) = tmp_res			 
 			 ID = rownames(out)
 			 out=cbind(ID, out)

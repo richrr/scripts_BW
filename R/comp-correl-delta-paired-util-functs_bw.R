@@ -943,9 +943,9 @@ calculateComparison = function (lgenes, expressionData, c1, c2, dict, comparMeth
 
 
 				    design <- model.matrix(~0+Group)
-				    colnames(design) <- all_categs
+				    colnames(design) <- make.names(all_categs)
 				    rownames(design) <- all_idxs
-				    #print(design)
+				    print(design)
 						#print(all_idxs)
 
 				    ### what about give all the list of genes and select only required later ###
@@ -965,9 +965,15 @@ calculateComparison = function (lgenes, expressionData, c1, c2, dict, comparMeth
 
 						# c1
 						res = strsplit(c1, ";")          # split the c1
-						unlistedres = unlist(res)
+						#unlistedres = gsub("'", '"' , unlist(res))
+						
+						unlistedresUnclean = unlist(res)
+						
+						unlistedres = make.names(unlist(res))
+						print(unlistedres)
+						
 						comparisonsargs = gsub("_vs_", "-" , unlistedres)     # create limma compatiable comparisons
-						#print(comparisonsargs)
+						print(comparisonsargs)
 
 						# build the makecontrasts
 						# https://support.bioconductor.org/p/27900/
@@ -976,6 +982,7 @@ calculateComparison = function (lgenes, expressionData, c1, c2, dict, comparMeth
 						prestr="makeContrasts("
 						poststr=",levels=design)"
 						commandstr=paste(prestr,astr,poststr,sep="")
+						print(commandstr)
 						#Now evaluate the command string
 						contrast.matrix <- eval(parse(text=commandstr))
 						#print(contrast.matrix)
@@ -1033,7 +1040,7 @@ calculateComparison = function (lgenes, expressionData, c1, c2, dict, comparMeth
 						    colnames(tmpout) = c(paste("Analys", indxg_, comparMethod,comparisonsargs[contarst],"limmaslog2FC=meanA-meanB",sep=" "), paste("Analys", indxg_, comparMethod,comparisonsargs[contarst],"limma t",sep=" "), paste("Analys", indxg_, comparMethod,comparisonsargs[contarst],"pvalue",sep=" "), paste("Analys", indxg_, comparMethod,comparisonsargs[contarst],"FDR",sep=" "), paste("Analys", indxg_, comparMethod,comparisonsargs[contarst],"log_odds_deg",sep=" "))
 						    #print(head(tmpout))
 
-						    c1_c2 = unlist(strsplit(unlistedres[contarst], "_vs_"))
+						    c1_c2 = unlist(strsplit(unlistedresUnclean[contarst], "_vs_"))
 						    c1_ = c1_c2[1]
 						    c2_ = c1_c2[2]
 						    out2 = sapply(lgenes, GetSimpleStats, subsetexpressionData, c1_, c2_, dict)
@@ -1235,7 +1242,7 @@ CalcComparisCor = function(pair, edata, c1, c2, dict, correlMethod, pairedd){
 
 
 		if(grepl(searchString_pattern, ca) && grepl(searchString_pattern, cb)){
-
+			# pysch library
 		  # compare correlations # sometimes this test gives NA when the two correlations are same and also obtained from the same sample size
 		  res = r.test(n = N_a, r12 = r_12, r34 = r_34, n2 = N_b)
 		  #print(res)

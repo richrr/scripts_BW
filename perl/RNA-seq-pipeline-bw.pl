@@ -317,7 +317,8 @@ sub processFastq{
 			# sort by name, convert to SAM for htseq-count
 			print "$samtoolsBin sort -n --threads $threads -o $acceptedBam.sn.bam --output-fmt BAM $acceptedBam  \n";
 			`$samtoolsBin sort -n --threads $threads -o $acceptedBam.sn.bam --output-fmt bam $acceptedBam ` if (! -e "$samFolder/$fileName");
-			`$samtoolsBin view --threads $threads --output-fmt sam -o $samFolder/$fileName $acceptedBam.sn.bam` if (! -e "$samFolder/$fileName");
+			`$samtoolsBin view -h --threads $threads --output-fmt sam -o $samFolder/$fileName $acceptedBam.sn.bam` if (! -e "$samFolder/$fileName");
+			`$samtoolsBin view --threads $threads --output-fmt sam -o $samFolder/view_wo-h/$fileName $acceptedBam.sn.bam` if (! -e "$samFolder/view_wo-h/$fileName");
 # samtools view -?
 # 3. SAM->BAM conversion: `samtools view -b in.sam.gz'.    -o FILE  output file name
 #  4. BAM->SAM conversion: `samtools view -h in.bam'.  # do you need -h?

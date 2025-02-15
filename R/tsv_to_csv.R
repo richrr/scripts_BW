@@ -12,7 +12,7 @@ for(infile in args)
   df = read.delim(infile, header=T, check.names=F, row.names=1)
 
   ID = gsub(",", ".", rownames(df), fixed=TRUE)
-  # ID = paste0("ASV_", ID)
+   #ID = paste0("ASV_", ID)
   outdf = cbind(ID, df)
 
   write.csv(outdf, paste(infile, ".csv", sep=''), quote=F, row.names=F)
