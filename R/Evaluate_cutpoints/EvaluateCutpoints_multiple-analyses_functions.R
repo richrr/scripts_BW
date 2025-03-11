@@ -268,7 +268,9 @@ cutPMethod <- function(df, time, event, biomarker, minimumSamps) {
   htmlwidgets::saveWidget(heatmap, file = "heatmap.html")
   cutpointRet = NumbSamplesCheck(allCutpointsDf, sdf, minimumSamps)
   if(cutpointRet == '') {print("Cannot find cutpoint passing minimum number of samples criteria. Moving to next"); return(1)}
-  cutpoint <- signif(allCutpointsDf[[ cutpointRet, 1 ]], digits = 4 )
+  # this is not good since "signif(3573.749188, digits=4) becomes 3574" and then can throw off counts in each group and also the analysis
+  #cutpoint <- signif(allCutpointsDf[[ cutpointRet, 1 ]], digits = 4 ) 
+  cutpoint <- allCutpointsDf[[ cutpointRet, 1 ]]
   p.value <- signif(allCutpointsDf[[ cutpointRet, 4 ]], digits = 4 )
   
   category <- ifelse( vector.biomarker < cutpoint, "low", "high" )

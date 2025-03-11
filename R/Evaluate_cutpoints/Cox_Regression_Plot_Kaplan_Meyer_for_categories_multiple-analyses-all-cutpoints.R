@@ -38,7 +38,8 @@ biomarkerCounts <- function(biomarker, cutpoint) {
   #length.lower.result <- paste(length.lower, "(", percent(length.lower.ratio), ")")
   #length.upper.result <- paste(length.upper, "(", percent(length.upper.ratio), ")")
   #length.results <- c(length.total, length.lower.result, length.upper.result)
-  return(min(length.lower.ratio, length.upper.ratio))
+  #return(min(length.lower.ratio, length.upper.ratio))
+  return(min(length.lower, length.upper))
 }
 
 
@@ -84,7 +85,7 @@ resultTableSurvival <- function(biomarker, survival, event, df, x) {
 }
 
 
-CoxAndKaplanMeyerMethod <- function(df, time, event, biomarker) {
+CoxAndKaplanMeyerMethod <- function(df, time, event, biomarker, minimumSamps) {
     
   vector.biomarker <- df[, biomarker ]
   vector.survival <- df[, time ]
@@ -92,7 +93,7 @@ CoxAndKaplanMeyerMethod <- function(df, time, event, biomarker) {
   
   for(cutpoint in sort(unique(vector.biomarker))){
   
-      if(biomarkerCounts(vector.biomarker, cutpoint) < 0.15){  # 15% percent minimum samples in both group
+      if(biomarkerCounts(vector.biomarker, cutpoint) < minimumSamps){  # instead of enforcing a 15% percent minimum samples in both group
         next
       }
       
@@ -143,15 +144,15 @@ CoxAndKaplanMeyerMethod <- function(df, time, event, biomarker) {
 
 # Function performed for default analyses.
 
-defaultAnalyses <- function(df, time, event, biomarker) {
+defaultAnalyses <- function(df, time, event, biomarker, minimumSamps) {
   setwd(biomarker)
-  CoxAndKaplanMeyerMethod(df, time, event, biomarker)
+  CoxAndKaplanMeyerMethod(df, time, event, biomarker, minimumSamps)
   setwd('..')
 }
 
 
-mainFunction <- function(df, time, event, biomarker) {
-  defaultAnalyses(df, time, event, biomarker)
+mainFunction <- function(df, time, event, biomarker, minimumSamps) {
+  defaultAnalyses(df, time, event, biomarker, minimumSamps)
 }
 
 
@@ -183,6 +184,12 @@ if ( dir.exists("analysis-results")) {
 # Step 1. Choose a file. Please change the name below.
 
 file <- (args[2])
+
+minimumSamps = 0
+# force minimum number of samples in both categs for cutpoint
+if(length(args) > 2){
+  minimumSamps = as.numeric(args[3])
+}
 
 
 # Step 2. Read table. Please choose a type of separator: "", ",", ";", "\t".
@@ -227,7 +234,7 @@ for (b in biomarkers) {
     print("Please correct time or event variables")
   } else if ((timeLen == 1) && (eventLen == 1)) {
     print("One time and event variable - results will be produced in biomarker folder")
-    mainFunction(df, time, event, b)
+    mainFunction(df, time, event, b, minimumSamps)
   } else if ((timeLen > 1) | (eventLen > 1)) {
     print("Please provide one time and one event variable")
   }
