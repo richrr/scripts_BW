@@ -127,9 +127,13 @@ CoxAndKaplanMeyerMethod <- function(df, time, event, biomarker, minimumSamps) {
                                     label = restext, size = 4) # x = 0, y = 0.2
 
       #ggsave(paste(biomarker, "Cutpoint", cutpoint,"KaplanMeierPlot.png",sep="_"), plot = print(ggsurvfit), dpi=600)
-      ggsave(paste(biomarker, "Cutpoint", cutpoint,"KaplanMeierPlot.eps",sep="_"), plot = print(ggsurvfit), dpi=600)
-      ggsave(paste(biomarker, "Cutpoint", cutpoint,"KaplanMeierPlot_.pdf",sep="_"), plot = print(ggsurvfit), dpi=600, onefile=F) # else produces an additional first blank page
+      #ggsave(paste(biomarker, "Cutpoint", cutpoint,"KaplanMeierPlot.eps",sep="_"), plot = print(ggsurvfit), dpi=600)
+      #ggsave(paste(biomarker, "Cutpoint", cutpoint,"KaplanMeierPlot_.pdf",sep="_"), plot = print(ggsurvfit), dpi=600, onefile=F) # else produces an additional first blank page
       
+      pdf(paste(biomarker, "Cutpoint", cutpoint,"KaplanMeierPlot_.pdf",sep="_"), onefile=F)
+      plot = print(ggsurvfit)
+      dev.off()
+
 
     } # end loop over cutpoint
 

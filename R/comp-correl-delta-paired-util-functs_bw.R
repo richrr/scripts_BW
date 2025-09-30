@@ -1114,15 +1114,23 @@ calculateComparison = function (lgenes, expressionData, c1, c2, dict, comparMeth
 
 	    # discards the first column of method used
 	    out = out[,-1]
-
+		
 	    colnames(out) = c(paste("Analys", indxg, method_label,"Mean", c1, sep=" "), paste("Analys", indxg, method_label,"Mean", c2, sep=" "), paste("Analys", indxg, method_label,"FoldChange", c1, "_vs_", c2, sep=" "), paste("Analys", indxg, method_label,"Median", c1, sep=" "), paste("Analys", indxg, method_label,"Median", c2, sep=" "), paste("Analys", indxg, method_label,"FolChMedian", c1, "_vs_", c2, sep=" "), paste("Analys", indxg, method_label,c1,"_vs_",c2,"pvalue",sep=" "), paste("Analys", indxg, method_label,"GeoMean", c1, sep=" "), paste("Analys", indxg, method_label,"GeoMean", c2, sep=" "), paste("Analys", indxg, method_label,"FolChGeoMean", c1, "_vs_", c2, sep=" "))
+		
+		#print(dim(out))
+		#print(head(out))
+		#print(colnames(out))
+		
+		#print(c(class(out), mode(out), storage.mode(out), typeof(out)))
 
+		#print(base::colnames(out))
+		
 	    # calculate FDR
-	    FDR = p.adjust(out[,colnames(out)[grep("pvalue",colnames(out))]],method="fdr")
-	    oldColnames = colnames(out)
+	    FDR = p.adjust(out[,base::colnames(out)[grep("pvalue",base::colnames(out))]],method="fdr")
+		oldColnames = base::colnames(out)
 	    out = cbind(out, FDR)
-	    colnames(out) = c(oldColnames,paste("Analys", indxg, method_label,c1,"_vs_",c2,"FDR",sep=" "))
-	    geneName = rownames(out)
+		colnames(out) = c(oldColnames,paste("Analys", indxg, method_label,c1,"_vs_",c2,"FDR",sep=" "))
+		geneName = base::rownames(out)
 	    out = cbind(geneName,out)
 
     }

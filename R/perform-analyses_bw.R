@@ -460,12 +460,17 @@ if(argv$writeCorrPerAnalysis || LargeNumbCorrsForCalc){
 
 
 
+
 #==================================================================================================================
 # load expression data
 #==================================================================================================================
-expressionData = read.csv(expressionDataFile,header = TRUE,check.names=FALSE,na.strings=c("","na","NA", "Na", "NaN", "#DIV/0!","#VALUE!"))
+expressionData = read.csv(expressionDataFile,header = TRUE,check.names=FALSE,na.strings=c("","na","NA", "N_A", "Na", "NaN", "#DIV/0!","#VALUE!"))
 expressionData = expressionData[!duplicated(expressionData[,symbleColumnName]),]    #delete duplicated measurements (genes, taxa labels, phenotypic labels, etc.)
 rownames(expressionData) = expressionData[,symbleColumnName]
+
+#head(expressionData)
+
+
 
 if(logbase != 0){
     if(logbase == 1) {
@@ -511,6 +516,7 @@ checkDiffInputs(genes2, as.vector(expressionData[,symbleColumnName]), "partners"
 
 # mapping file and expt file to check sample name
 checkDiffInputs(as.vector(mapFile[, samplIdCol]), as.vector(colnames(expressionData)), "mapping", "expression")
+
 
 
 # analysis file and mapping file to check group names
