@@ -1,2 +1,12 @@
 .DS_Store
 ._*
+# R
+.Rhistory
+.RData
+
+# Python
+__pycache__/
+
+# Logs / temp
+*.log
+*.tmp

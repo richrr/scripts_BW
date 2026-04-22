@@ -63,39 +63,177 @@ module load gtdb-tk/2.6.1 # uses ref db v226 by default
 echo "Counting bins..."
 #NUM_BINS=$(ls -1 "$BINS_DIR"/*.fa 2>/dev/null | wc -l) # failed due to 126:0 error which is possibly 
                                                                                 # because glob+ls takes few seconds if there are 60K fa files
-GENOME_LIST="$DREP_OUT/genomes_list.txt"
-find -L "$BINS_DIR" -maxdepth 1 -type f -name "*.fa" > "$GENOME_LIST"
+
+# ---------------------------
+# DEREPLICATION INPUT RESOLUTION
+# ---------------------------
+
+PARENT_DIR="$(dirname "$BINS_DIR")"
+
+GENOME_LIST="$PARENT_DIR/genomes_list.txt"
+CHECKM2_FILTERED="$PARENT_DIR/checkm2_filtered.tsv"
+
+
+echo "Resolving genome inputs for dRep..."
+
+# ---------------------------
+# CASE 1: Already aggregated (preferred path)
+# ---------------------------
+if [[ -f "$GENOME_LIST" && -s "$GENOME_LIST" && \
+      -f "$CHECKM2_FILTERED" && -s "$CHECKM2_FILTERED" ]]; then
+    echo "Detected aggregated run (genomes_list + filtered QC exist)."
+
+# ---------------------------
+# CASE 2: Single batch or missing gather outputs
+# ---------------------------
+else
+    echo "Aggregated files missing → building QC-filtered genome list from CheckM2..."
+
+    #CHECKM2_SUMMARY="GenomeBinning/QC/checkm2_summary.tsv"
+    CHECKM2_SUMMARY="$(dirname "$BINS_DIR")/../QC/checkm2_summary.tsv"
+    #[[ -f "$CHECKM2_SUMMARY" ]] || { echo "ERROR: CheckM2 not found"; exit 1; }
+
+
+    # sanity check input exists
+    if [[ ! -s "$CHECKM2_SUMMARY" ]]; then
+        echo "ERROR: CheckM2 summary not found at $CHECKM2_SUMMARY"
+        exit 1
+    fi
+
+
+    HEADER="$CHECKM2_SUMMARY"
+
+    COMP_COL=$(head -1 "$HEADER" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="Completeness") print i}')
+    CONT_COL=$(head -1 "$HEADER" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="Contamination") print i}')
+    NAME_COL=$(head -1 "$HEADER" | awk -F'\t' '{for(i=1;i<=NF;i++) if($i=="Name") print i}')
+
+    if [[ -z "$COMP_COL" || -z "$CONT_COL" || -z "$NAME_COL" ]]; then
+        echo "ERROR: Missing required columns in CheckM2 file"
+        exit 1
+    fi
+    
+    # ---------------------------
+    # build QC filtered table
+    # (keep your thresholds consistent with pipeline policy)
+    # ---------------------------
+    awk -F'\t' -v comp="$COMP_COL" -v cont="$CONT_COL" '
+NR==1 || ($comp >= 50 && $cont <= 10)
+' "$CHECKM2_SUMMARY" > "$CHECKM2_FILTERED"
+
+    # ---------------------------
+    # build genome list from QC table
+    # ---------------------------
+    awk -F'\t' -v name="$NAME_COL" -v dir="$BINS_DIR" '
+NR>1 {print dir "/" $name ".fa"}
+' "$CHECKM2_FILTERED" > "$GENOME_LIST"
+
+fi
+
+# ---------------------------
+# FINAL VALIDATION
+# ---------------------------
 NUM_BINS=$(wc -l < "$GENOME_LIST")
 
-if [ "$NUM_BINS" -eq 0 ]; then
-    echo "ERROR: No *.fa files found in $BINS_DIR/"
+if [[ "$NUM_BINS" -eq 0 ]]; then
+    echo "ERROR: Genome list is empty after resolution step."
     exit 1
 fi
 
-NUM_CHUNK=$(( NUM_BINS / 3 ))
-(( NUM_CHUNK < 1 )) && NUM_CHUNK=1      # If NUM_BINS < 3
-echo "Detected $NUM_BINS bins → chunk size = $NUM_CHUNK"
+echo "Final genome count for dRep: $NUM_BINS"
 
 
-DREP_GENOMES_DIR="$DREP_OUT/dereplicated_genomes"
 
-if [[ -d "$DREP_GENOMES_DIR" && $(ls -1 "$DREP_GENOMES_DIR"/*.fa 2>/dev/null | wc -l) -gt 0 ]]; then
+if [[ $(wc -l < "$GENOME_LIST") -ne $(awk 'NR>1' "$CHECKM2_FILTERED" | wc -l) ]]; then
+    echo "WARNING: mismatch between QC table and genome list"
+fi
+
+
+
+
+# dynamic chunk sizing (keep your logic but safer scaling)
+#NUM_CHUNK=$(( NUM_BINS / 3 ))
+#(( NUM_CHUNK < 1 )) && NUM_CHUNK=1
+NUM_CHUNK=$(( NUM_BINS / 10 ))
+(( NUM_CHUNK < 1000 )) && NUM_CHUNK=1000
+(( NUM_CHUNK > 5000 )) && NUM_CHUNK=5000
+echo "Chunk size = $NUM_CHUNK"
+
+
+
+#DREP_GENOMES_DIR="$DREP_OUT/dereplicated_genomes"
+#if [[ -d "$DREP_GENOMES_DIR" && $(ls -1 "$DREP_GENOMES_DIR"/*.fa 2>/dev/null | wc -l) -gt 0 ]]; then
+if [[ -s "$DREP_OUT/data_tables/Cdb.csv" && \
+      -d "$DREP_OUT/dereplicated_genomes" && \
+      $(find "$DREP_OUT/dereplicated_genomes" -name "*.fa" | wc -l) -gt 0 ]]; then
     echo "dRep output already exists → skipping dereplication."
 else
     echo "Running dRep dereplicate..."
     dRep check_dependencies || echo "WARNING: Missing optional dependencies, continuing..." # not using -g "$BINS_DIR"/*.fa
-    dRep dereplicate "$DREP_OUT" \
-        -g "$GENOME_LIST" \
-        -p 56 \
-        -l 10000 \
-        -pa 0.9 \
-        -sa 0.95 \
-        -nc 0.5 \
-        -cm larger \
-        --S_algorithm fastANI \
-        -comp 50 \
-        --primary_chunksize "$NUM_CHUNK" \
-        --run_tertiary_clustering
+
+    LARGE_THRESHOLD=15000   # switch point (tunable)
+
+    if [[ "$NUM_BINS" -lt "$LARGE_THRESHOLD" ]]; then
+        echo "Small/medium dataset → running single-pass dRep"
+
+        # replacing -comp 50 with --ignoreGenomeQuality
+        dRep dereplicate "$DREP_OUT" \
+            -g "$GENOME_LIST" \
+            -p 56 \
+            -l 10000 \
+            -pa 0.9 \
+            -sa 0.95 \
+            -nc 0.5 \
+            -cm larger \
+            --S_algorithm fastANI \
+            --ignoreGenomeQuality \
+            --primary_chunksize "$NUM_CHUNK" \
+            --run_tertiary_clustering
+    else
+        echo "Large dataset detected ($NUM_BINS genomes) → using 2-stage dRep"
+
+        STAGE1_DIR="$DREP_OUT/stage1_chunks"
+        mkdir -p "$STAGE1_DIR"
+
+        echo "Splitting genome list..."
+        split -l 5000 "$GENOME_LIST" "$STAGE1_DIR/chunk_"
+
+        echo "Running Stage 1 dRep on chunks..."
+
+        for chunk in "$STAGE1_DIR"/chunk_*; do
+            chunk_name=$(basename "$chunk")
+            outdir="$STAGE1_DIR/${chunk_name}.drep"
+
+            echo "Processing $chunk_name"
+
+            dRep dereplicate "$outdir" \
+                -g "$chunk" \
+                -p 16 \
+                -pa 0.9 \
+                -sa 0.9 \
+                --S_algorithm fastANI \
+                --ignoreGenomeQuality
+        done
+
+        echo "Collecting Stage 1 representatives..."
+
+        STAGE2_INPUT="$DREP_OUT/stage2_genomes.txt"
+        find "$STAGE1_DIR" -path "*/dereplicated_genomes/*.fa" > "$STAGE2_INPUT"
+
+        echo "Running Stage 2 dRep..."
+
+        dRep dereplicate "$DREP_OUT" \
+            -g "$STAGE2_INPUT" \
+            -p 32 \
+            -l 10000 \
+            -pa 0.9 \
+            -sa 0.95 \
+            -nc 0.5 \
+            -cm larger \
+            --S_algorithm fastANI \
+            --ignoreGenomeQuality \
+            --primary_chunksize 1000 \
+            --run_tertiary_clustering
+    fi
 fi
 
 # Verify dRep output exists and is non-empty

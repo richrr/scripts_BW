@@ -1,5 +1,19 @@
 #!/usr/bin/env Rscript
 
+# RPKM
+  ## log2(RPKM + 1) for heatmap and ordination visualizations
+  ## MaAsLin2 (normalization = NONE) for differential abundance testing
+
+# counts
+  ## MaAsLin2 (normalization = TSS) for differential abundance testing
+  ## DESeq2 or limma-voom for differential abundance testing (use RAW counts, no TSS)
+
+# Method	          Input	    Normalization
+# MaAsLin2 (RPKM)	  RPKM	    NONE
+# MaAsLin2 (counts)	counts	  TSS (or CLR)
+# DESeq2	          counts	  internal
+# limma-voom	      counts	  internal
+
 # cd /data/rodriguesrr/Koltsova/analysis/Nov2025_IL22_Alb_Vil/nf-core-mag/odir_mag_no_spades_busco_metabinner
 # usage: Rscript /data/rodriguesrr/scripts/bash/nfcore.mag.accessories/join_MAG_gtdbtk_taxonomy_rpkm.R --taxonomy GenomeBinning/DASTool/bins.dRep.MAGs/gtdbtk_r226_out/gtdbtk.bac120.summary.tsv --rpkm GenomeBinning/DASTool/bins.dRep.samples
 
