@@ -138,6 +138,7 @@ if (length(header_line) == 0) {
     group_by(mag) %>%
     summarise(
       rpkm = sum(RPKM, na.rm = TRUE),
+      counts = sum(Reads, na.rm = TRUE),
       .groups = "drop"
     ) %>%
     mutate(sample = sample_id)
@@ -149,13 +150,24 @@ if (length(header_line) == 0) {
 mag_abundance_long <- rpkm_long %>%
   left_join(gtdb, by = "mag")
 
-mag_abundance_wide <- rpkm_long %>%
+
+mag_abundance_wide_rpkm <- mag_abundance_long %>%
+  select(mag, sample, rpkm) %>%
   pivot_wider(
     names_from  = sample,
     values_from = rpkm,
     values_fill = 0
-  ) %>%
-  left_join(gtdb, by = "mag")
+  ) 
+
+
+mag_abundance_wide_counts <- mag_abundance_long %>%
+  select(mag, sample, counts) %>%
+  pivot_wider(
+    names_from  = sample,
+    values_from = counts,
+    values_fill = 0
+  ) 
+
 
 # ---------------------------
 # WRITE OUTPUTS
@@ -166,8 +178,13 @@ write_tsv(
 )
 
 write_tsv(
-  mag_abundance_wide,
+  mag_abundance_wide_rpkm,
   "MAG_sample_rpkm_with_taxonomy.wide.tsv"
+)
+
+write_tsv(
+  mag_abundance_wide_counts,
+  "MAG_sample_counts_with_taxonomy.wide.tsv"
 )
 
 cat("Done.\n")
