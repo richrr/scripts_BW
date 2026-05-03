@@ -60,7 +60,7 @@ echo
 
 
 echo "Run the batches with Swarm:"
-echo "  bash /data/rodriguesrr/scripts/bash/nfcore.mag.accessories/generate_mag_swarm.sh $OUTDIR $OUTDIR/mag_batches -g 240 -t 48 --time 4-00:00:00 --maxrunning 3 --sbatch \"--mail-type=ALL --mail-user=rodriguesrr@nih.gov\""
+echo "  bash /data/rodriguesrr/scripts/bash/nfcore.mag.accessories/generate_mag_swarm.sh $OUTDIR $OUTDIR/mag_batches -g 240 -t 48 --gres=lscratch:100 --time 4-00:00:00 --maxrunning 1 --sbatch \"--mail-type=ALL --mail-user=rodriguesrr@nih.gov\""
 echo
 echo "Then launch:"
-echo "  swarm --module nextflow/25.04.2,pandoc --logdir $OUTDIR/mag_batches/logs -g 240 -t 48 --time 4-00:00:00 --maxrunning 3 --sbatch \"--mail-type=ALL --mail-user=rodriguesrr@nih.gov\" ./run-nfcore.mag.swarm "
+echo "  swarm --module nextflow/25.04.2,pandoc --logdir $OUTDIR/mag_batches/logs -g 240 -t 48 --gres=lscratch:100 --time 4-00:00:00 --maxrunning 1 --sbatch \"--mail-type=ALL --mail-user=rodriguesrr@nih.gov\" ./run-nfcore.mag.swarm "

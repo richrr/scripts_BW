@@ -1,16 +1,16 @@
 #!/bin/bash
 # /data/rodriguesrr/scripts/bash/nfcore.mag.accessories/generate_mag_swarm.sh
 # Usage:
-# bash /data/rodriguesrr/scripts/bash/nfcore.mag.accessories/generate_mag_swarm.sh <BATCH_DIR> <OUTROOT> -g 400 -t 64 --time 4-00:00:00 --maxrunning 3
-# bash /data/rodriguesrr/scripts/bash/nfcore.mag.accessories/generate_mag_swarm.sh batches batches/mag_batches -g 400 -t 64 --time 4-00:00:00 --maxrunning 3
-# then: swarm --module nextflow/25.04.2,pandoc --logdir batches/mag_batches/logs -g 400 -t 64 --time 4-00:00:00 --maxrunning 3 ./run-nfcore.mag.swarm
+# bash /data/rodriguesrr/scripts/bash/nfcore.mag.accessories/generate_mag_swarm.sh <BATCH_DIR> <OUTROOT> -g 400 -t 64 --time 4-00:00:00 --maxrunning 1
+# bash /data/rodriguesrr/scripts/bash/nfcore.mag.accessories/generate_mag_swarm.sh batches batches/mag_batches -g 400 -t 64 --time 4-00:00:00 --maxrunning 1
+# then: swarm --module nextflow/25.04.2,pandoc --logdir batches/mag_batches/logs -g 400 -t 64 --time 4-00:00:00 --maxrunning 1 ./run-nfcore.mag.swarm
 # add --resume tag while rerun.
 # or: swarm --module nextflow/25.04.2,pandoc --logdir batches/mag_batches/logs_rerun -g 400 -t 64 --time 4-00:00:00 --maxrunning 1 rerun_failed_batches.swarm
 
 set -euo pipefail
 
 if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <BATCH_DIR> <OUTROOT> [-g 240 -t 48 --time 4-00:00:00 --maxrunning 3 --sbatch \"--mail-type=ALL --mail-user=rodriguesrr@nih.gov\"]"
+    echo "Usage: $0 <BATCH_DIR> <OUTROOT> [-g 240 -t 48 --gres=lscratch:100 --time 4-00:00:00 --maxrunning 1 --sbatch \"--mail-type=ALL --mail-user=rodriguesrr@nih.gov\"]"
     exit 1
 fi
 RUN_DIR=$(pwd)
@@ -79,5 +79,6 @@ done
 
 
 echo "Swarm file generated: $SWARM_FILE"
+echo "Note that the sbatch args must be in the double quotes when actually launching the swarm."
 echo "Launch with: swarm --module nextflow/25.04.2,pandoc --logdir $OUTROOT/logs $SWARM_OPTS $SWARM_FILE"
 

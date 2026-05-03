@@ -152,7 +152,7 @@ mag_abundance_long <- rpkm_long %>%
 
 
 mag_abundance_wide_rpkm <- mag_abundance_long %>%
-  select(mag, sample, rpkm) %>%
+  select(mag, classification, sample, rpkm) %>%
   pivot_wider(
     names_from  = sample,
     values_from = rpkm,
@@ -161,7 +161,7 @@ mag_abundance_wide_rpkm <- mag_abundance_long %>%
 
 
 mag_abundance_wide_counts <- mag_abundance_long %>%
-  select(mag, sample, counts) %>%
+  select(mag, classification, sample, counts) %>%
   pivot_wider(
     names_from  = sample,
     values_from = counts,
